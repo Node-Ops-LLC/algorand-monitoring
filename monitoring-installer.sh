@@ -63,6 +63,9 @@ get_environment() {
   fi
 }
 
+get_environment
+check_reqs
+
 if [ $# -ne 0 ] #arguments check
 then
   case $1 in
