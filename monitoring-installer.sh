@@ -63,4 +63,34 @@ get_environment() {
   fi
 }
 
+if [ $# -ne 0 ] #arguments check
+then
+  case $1 in
+    --1) #install prometheus
+      install_prometheus
+      exit 0
+      ;;
+    --2) #install grafana
+      install_grafana
+      exit 0
+      ;;
+    --3) #install node_exporter
+      install_exporter
+      exit 0
+      ;;
+    --4) #install Algorand dashboards
+      install_dashboards
+      exit 0
+      ;;
+    --5) #install extra dashboards
+      install_extras
+      exit 0
+      ;;
+    --help)
+      usage
+      exit 0
+      ;;
+  esac
+fi
+
 exit 0
