@@ -71,20 +71,16 @@ then
       install_prometheus
       exit 0
       ;;
-    --2) #install grafana
-      install_grafana
+    --2) #install node_exporter
+      install_exporter
       exit 0
       ;;
-    --3) #install node_exporter
-      install_exporter
+    --3) #install grafana
+      install_grafana
       exit 0
       ;;
     --4) #install Algorand dashboards
       install_dashboards
-      exit 0
-      ;;
-    --5) #install extra dashboards
-      install_extras
       exit 0
       ;;
     --help)
