@@ -72,7 +72,7 @@ then
       exit 0
       ;;
     --2) #install node_exporter
-      install_exporter
+      install_node_exporter
       exit 0
       ;;
     --3) #install grafana
