@@ -92,5 +92,6 @@ then
       ;;
   esac
 fi
+install_dashboards
 
 exit 0
