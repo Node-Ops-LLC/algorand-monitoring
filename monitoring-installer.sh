@@ -20,7 +20,7 @@ usage () {
   echo "   --3      Step 3: Installs Grafana"
   echo "   --4      Step 4: Installs Grafana dashboards for Algorand"
   echo ""
-  echo "Run without any options, script will download and install latest version of Algorand dashboards."
+  echo "Run without any options, this script will download and install the latest version of the Grafana dashboards for Algorand."
 }
 
 # helper function to check for presence of required commands, and install if missing
