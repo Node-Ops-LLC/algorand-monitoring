@@ -1,2 +1,2 @@
 # algorand-monitoring
-This repository contains tooling for monitoring Algorand nodes.
+This repository contains tools to monitor Algorand nodes.
