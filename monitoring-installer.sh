@@ -39,7 +39,6 @@ check_reqs () {
 
 # helper function to check for supported environment
 get_environment() {
-  echo "Checking environment..."
   check_reqs
   foundArch="$(uname -m)"                         # get system architecture
   foundOS="$(uname)"                              # get OS
@@ -51,10 +50,10 @@ get_environment() {
   fi
   if [ "$foundArch" = "aarch64" ]; then
     getArch="arm64"                               # running on arm arch (probably RasPi)
-    echo "Found arm64 architecture..."
+    # echo "Found arm64 architecture..."
   elif [ "$foundArch" = "x86_64" ]; then
     getArch="amd64"                               # running on intel/amd
-    echo "Found amd64 architecture..."
+    # echo "Found amd64 architecture..."
   else
     #sorry, don't know you.
     echo "Unsupported architecture: $foundArch!"
@@ -64,7 +63,6 @@ get_environment() {
 }
 
 get_environment
-check_reqs
 
 if [ $# -ne 0 ] #arguments check
 then
@@ -95,6 +93,7 @@ then
       ;;
   esac
 fi
+
 install_dashboards
 
 exit 0
