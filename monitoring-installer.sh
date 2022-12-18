@@ -2,8 +2,7 @@
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 #
-# Performs a multi-step installation of Prometheus, Node Exporter, Grafana, and Algorand dashboards
-# Simplifies installating monitoring tools for node runners
+# Installs monitoring tools for Algorand node runners: Prometheus, Node Exporter, Grafana, and dashboards
 # Tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
 # REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
 # REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
@@ -165,16 +164,18 @@ install_prometheus() {
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
+# Checks the operating environment
 get_environment
 
-if [ $# -ne 0 ] # Check argument
+# Checks input arguments
+if [ $# -ne 0 ]
 then
   case $1 in
     --1) # Install Prometheus
       install_prometheus
       exit 0
       ;;
-    --2) # Install node_exporter
+    --2) # Install Node Exporter
       install_node_exporter
       exit 0
       ;;
@@ -193,6 +194,7 @@ then
   esac
 fi
 
-install_dashboards # Perform the default action if no input argument
+# Performs the default action if no input is supplied
+install_dashboards
 
 exit 0
