@@ -1,15 +1,22 @@
 #!/bin/bash
 
-# Performs a multi-step installation of Prometheus, Node Exporter, Grafana, Algorand dashboards
-# Intended to simplify monitoring tool installation for node runners
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+#
+# Performs a multi-step installation of Prometheus, Node Exporter, Grafana, and Algorand dashboards
+# Simplifies installating monitoring tools for node runners
 # Tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
 # REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
-# REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu
+# REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
+# Support: https://discord.gg/algorand # node runners
+#
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
-# stop on errors
+# Stop on errors
 set -e
 
-# helper function that prints usage
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Prints usage information
 usage () {
   echo "Usage: $0 [--1|--2|--3|--4|--help]"
   echo ""
@@ -18,78 +25,174 @@ usage () {
   echo "   --1      Step 1: Installs Prometheus"
   echo "   --2      Step 2: Installs Node Exporter"
   echo "   --3      Step 3: Installs Grafana"
-  echo "   --4      Step 4: Installs Grafana dashboards for Algorand"
+  echo "   --4      Step 4: Installs Algorand dashboards"
   echo ""
-  echo "Run without any options, this script will download and install the latest version of the Grafana dashboards for Algorand."
+  echo "When run without any options, this script will download and install the latest version of the Algorand dashboards."
 }
 
-# helper function to check for presence of required commands, and install if missing
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Checks for presence of required commands, and attempts to install them if missing
 check_reqs () {
-  if ! command -v curl &> /dev/null
+  if ! command -v curl &> /dev/null # If curl is not found...
   then
       echo "curl could not be found, attempting to install..."
       sudo apt-get install curl -y
   fi
-  if ! command -v wget &> /dev/null
+  if ! command -v wget &> /dev/null # If wget is not found...
   then
       echo "wget could not be found, attempting to install..."
       sudo apt-get install wget -y
   fi
 }
 
-# helper function to check for supported environment
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Checks for supported environments
 get_environment() {
-  check_reqs
-  foundArch="$(uname -m)"                         # get system architecture
-  foundOS="$(uname)"                              # get OS
+  check_reqs # Check for required commands
+  foundArch="$(uname -m)" # Get system architecture
+  foundOS="$(uname)" # Get OS
   if [ "$foundOS" != "Linux" ]; then
-    #sorry, don't know you.
     echo "Unsupported operating system: $foundOS!"
     echo "Exiting."
     exit
   fi
   if [ "$foundArch" = "aarch64" ]; then
-    getArch="arm64"                               # running on arm arch (probably RasPi)
-    # echo "Found arm64 architecture..."
+    getArch="arm64" # Running on arm arch (probably RasPi)
   elif [ "$foundArch" = "x86_64" ]; then
-    getArch="amd64"                               # running on intel/amd
-    # echo "Found amd64 architecture..."
+    getArch="amd64" # Running on intel/amd
   else
-    #sorry, don't know you.
     echo "Unsupported architecture: $foundArch!"
     echo "Exiting."
     exit
   fi
 }
 
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Installs Prometheus
+install_prometheus() {
+
+  # Print header
+  echo "";
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Step 1: Installing Prometheus";
+  echo "";
+
+  # Get the latest release
+  promFileName="$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
+  if [[ $(wget -S --spider "${promFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+    echo "Prometheus install archive found: $promFileName"
+  else
+    echo "Unable to find Prometheus install archive. Exiting."
+    exit
+  fi
+
+  # Download and extract the latest release
+  echo "Attempting to download: ${promFileName}"
+  wget -nv --show-progress -O prometheus.tar.gz "${promFileName}"
+  sudo mkdir -pm744 prometheus
+  tar -xvf prometheus.tar.gz -C prometheus --strip-components=1
+  sudo apt-get install -y apt-transport-https
+  cd prometheus
+
+  # Add group, user and directories
+  sudo groupadd --system prometheus
+  sudo useradd -s /sbin/nologin -M --system -g prometheus prometheus
+  sudo mkdir -pm744 /etc/prometheus /var/lib/prometheus
+
+  # Move files to target directories and apply permissions
+  sudo cp {prometheus,promtool} /usr/local/bin/
+  sudo chown prometheus:prometheus /usr/local/bin/{prometheus,promtool}
+  sudo cp -r {consoles,console_libraries} /etc/prometheus/
+  sudo cp prometheus.yml /etc/prometheus/
+  sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/
+  sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/
+
+  # Create the service file
+  echo "Creating the service file"
+  {
+    echo "[Unit]"
+    echo "Description=Prometheus"
+    echo "Documentation=https://prometheus.io/docs/introduction/overview/"
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo ""
+    echo "[Service]"
+    echo "Type=simple"
+    echo "Restart=always"
+    echo "User=prometheus"
+    echo "Group=prometheus"
+    echo "SyslogIdentifier=prometheus"
+    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
+    echo "ExecStart=/usr/local/bin/prometheus \\"
+    echo "  --config.file=/etc/prometheus/prometheus.yml \\" # Configuration file location
+    echo "  --storage.tsdb.path=/var/lib/prometheus/ \\" # Database storage location
+    echo "  --storage.tsdb.retention.size=100GB \\" # Configure this limit as desired
+    echo "  --storage.tsdb.retention.time=120d \\" # Configure this limit as desired
+    echo "  --web.console.templates=/etc/prometheus/consoles \\"
+    echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
+    echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
+    echo "  --web.external-url=http://localhost:9090/prometheus \\" # To secure from external access, leave the port closed
+    echo "  --web.route-prefix=/prometheus"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+  } >prometheus.service
+
+  # Initialize the service
+  sudo cp prometheus.service /etc/systemd/system/prometheus.service
+  sudo systemctl daemon-reload
+  sudo systemctl start prometheus
+  sudo systemctl enable prometheus
+
+  # Print footer
+  echo ""
+  echo "Prometheus is installed!"
+  echo ""
+  echo "Please verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status prometheus"
+  echo ""
+  echo "You can query the database using this endpoint:"
+  echo "  http://your-node-host-ip:9090/"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+
+  exit 0
+}
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
 get_environment
 
-if [ $# -ne 0 ] #arguments check
+if [ $# -ne 0 ] # Check argument
 then
   case $1 in
-    --1) #install prometheus
+    --1) # Install Prometheus
       install_prometheus
       exit 0
       ;;
-    --2) #install node_exporter
+    --2) # Install node_exporter
       install_node_exporter
       exit 0
       ;;
-    --3) #install grafana
+    --3) # Install Grafana
       install_grafana
       exit 0
       ;;
-    --4) #install Algorand dashboards
+    --4) # Install Algorand dashboards
       install_dashboards
       exit 0
       ;;
-    --help)
+    --help) # Print usage
       usage
       exit 0
       ;;
   esac
 fi
 
-install_dashboards
+install_dashboards # Perform the default action if no input argument
 
 exit 0
