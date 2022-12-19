@@ -90,6 +90,12 @@ install_prometheus() {
   echo "Installing Prometheus";
   echo "";
 
+  # Check if Prometheus is already installed
+  if command -v  prometheus &> /dev/null; then
+    echo "Prometheus is already installed: $(command -v prometheus)"
+    (exit 1)
+  fi
+
   # Get the latest release
   promFileName="$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
   if [[ $(wget -S --spider "${promFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
@@ -191,6 +197,13 @@ install_node_exporter() {
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
   echo "Installing Node Exporter";
   echo;
+
+  # Check if Node Exporter is already installed
+  # if command -v  node_exporter &> /dev/null; then
+    # echo "Node Exporter is already installed: $(command -v node_exporter)"
+	# (exit 1)
+  # fi # This should be implemented, but the default Algod install includes node_exporter in /usr/bin/ as part of the managed package
+  # This would instead need to check for node_exporter in path /usr/local/bin/
 
   # Get the latest release
   nodeExFileName="$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
@@ -316,6 +329,12 @@ install_grafana() {
   echo "Installing Grafana";
   echo;
 
+  # Check if Grafana is already installed
+  if command -v grafana-server &> /dev/null; then
+    echo "Grafana is already installed: $(command -v grafana-server)"
+    (exit 1)
+  fi
+
   # Get the latest release
   # REF: https://grafana.com/docs/grafana/latest/setup-grafana/installation/debian/
   echo "Installing package"
@@ -383,23 +402,18 @@ if [ -z $1 ]; then
 else
   case $1 in
     --1) # Install Prometheus
-      install_prometheus
-      (exit 0);;
+      install_prometheus;;
     --2) # Install Node Exporter
-      install_node_exporter
-      (exit 0);;
+      install_node_exporter;;
     --3) # Install Grafana
-      install_grafana
-      (exit 0);;
+      install_grafana;;
     --4) # Install Algorand dashboards
-      install_dashboards
-      (exit 0);;
+      install_dashboards;;
     --help) # Print usage
-      usage
-      (exit 0);;
-	*) # Any other argument
-	  echo "Please choose a supported option"
-	  (exit 1);;
+      usage;;
+    *) # Any other argument
+      echo "Please choose a supported option"
+      (exit 1);;
   esac
 fi
 
