@@ -114,6 +114,17 @@ install_prometheus() {
   sudo useradd -s /sbin/nologin -M --system -g prometheus prometheus
   sudo mkdir -pm744 /etc/prometheus /var/lib/prometheus
 
+  # Modify the configuration file to scrape the Algod metrics endpoint
+  {
+    echo ""
+    echo "  - job_name: 'algod-metrics'"
+    echo "    metrics_path: '/metrics'"
+    echo "    static_configs:"
+    echo "      - targets: ['localhost:9100']"
+    echo "        labels:"
+    echo "          alias: 'algod'"
+  } >> prometheus.yml
+
   # Move files to target directories and apply permissions
   sudo cp {prometheus,promtool} /usr/local/bin/
   sudo cp -r {consoles,console_libraries} /etc/prometheus/
@@ -229,7 +240,7 @@ install_node_exporter() {
     echo "SyslogIdentifier=node_exporter"
     echo "ExecReload=/bin/kill -HUP \$MAINPID"
     echo "ExecStart=/usr/local/bin/node_exporter \\"
-    echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
+    echo "  --web.listen-address=:9101 \\" # Note: Algorand already uses 9100 for its default metrics endpoint, so use 9101
     echo "  --web.telemetry-path=\"/metrics\" \\"
     echo "  --collector.disable-defaults \\"
     echo "  --collector.bonding \\"
@@ -272,13 +283,6 @@ install_node_exporter() {
   cp /etc/prometheus/prometheus.yml .
   {
     echo ""
-    echo "  - job_name: 'algod-metrics'"
-    echo "    metrics_path: '/metrics'"
-    echo "    static_configs:"
-    echo "      - targets: ['localhost:9100']" # This default algod endpoint probably has all the metrics you would need to monitor the node
-    echo "        labels:"
-    echo "          alias: 'algod'"
-    echo ""
     echo "  - job_name: 'node-metrics'"
     echo "    scrape_interval: 5s"
     echo "    metrics_path: '/metrics'"
@@ -286,7 +290,6 @@ install_node_exporter() {
     echo "      - targets: ['localhost:9101']"
     echo "        labels:"
     echo "          alias: 'node'"
-    echo ""
   } >> prometheus.yml
   sudo cp prometheus.yml /etc/prometheus/
   sudo systemctl restart prometheus
@@ -327,6 +330,22 @@ install_grafana() {
   echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
   sudo apt-get update -y
   sudo apt-get install grafana-enterprise -y
+
+  # Configure the Prometheus datasource
+  {
+    echo "apiVersion: 1"
+    echo ""
+    echo "datasources:"
+    echo "  - name: Prometheus"
+    echo "    type: prometheus"
+    echo "    access: proxy"
+    echo "    orgId: 1"
+    echo "    url: http://localhost:9090"
+    echo "    isDefault: true"
+    echo "    version: 1"
+    echo "    editable: false"
+  } > prom.yaml
+  sudo cp prom.yaml /etc/grafana/provisioning/datasources/
 
   echo "Starting Grafana service..."
   sudo systemctl daemon-reload
