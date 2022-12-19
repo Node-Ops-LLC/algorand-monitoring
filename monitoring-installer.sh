@@ -17,6 +17,7 @@ set -e
 
 # Prints usage information
 usage () {
+
   echo "Usage: $0 [--1|--2|--3|--4|--help]"
   echo ""
   echo "Options:"
@@ -27,36 +28,48 @@ usage () {
   echo "   --4      Step 4: Installs Algorand dashboards"
   echo ""
   echo "When run without any options, this script will download and install the latest version of the Algorand dashboards."
+
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
 # Checks for presence of required commands, and attempts to install them if missing
 check_reqs () {
-  if ! command -v curl &> /dev/null # If curl is not found...
-  then
-      echo "curl could not be found, attempting to install..."
-      sudo apt-get install curl -y
+
+  # Check for curl
+  if ! command -v curl &> /dev/null; then # If curl is not found...
+    echo "curl could not be found, attempting to install..."
+    sudo apt-get install curl -y
   fi
-  if ! command -v wget &> /dev/null # If wget is not found...
-  then
-      echo "wget could not be found, attempting to install..."
-      sudo apt-get install wget -y
+  
+  # Check for wget
+  if ! command -v wget &> /dev/null; then # If wget is not found...
+    echo "wget could not be found, attempting to install..."
+    sudo apt-get install wget -y
   fi
+
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
 # Checks for supported environments
 get_environment() {
-  check_reqs # Check for required commands
+
+  # Check system requirements
+  check_reqs
+  
+  # Get operating environment
   foundArch="$(uname -m)" # Get system architecture
   foundOS="$(uname)" # Get OS
+  
+  # Check operating system compatibility
   if [ "$foundOS" != "Linux" ]; then
     echo "Unsupported operating system: $foundOS!"
     echo "Exiting."
     exit
   fi
+  
+  # Check system architecture compatibility
   if [ "$foundArch" = "aarch64" ]; then
     getArch="arm64" # Running on arm arch (probably RasPi)
   elif [ "$foundArch" = "x86_64" ]; then
@@ -66,6 +79,7 @@ get_environment() {
     echo "Exiting."
     exit
   fi
+
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -76,7 +90,7 @@ install_prometheus() {
   # Print header
   echo "";
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Step 1: Installing Prometheus";
+  echo "Installing Prometheus";
   echo "";
 
   # Get the latest release
@@ -93,7 +107,6 @@ install_prometheus() {
   wget -nv --show-progress -O prometheus.tar.gz "${promFileName}"
   sudo mkdir -pm744 prometheus
   tar -xvf prometheus.tar.gz -C prometheus --strip-components=1
-  sudo apt-get install -y apt-transport-https
   cd prometheus
 
   # Add group, user and directories
@@ -103,11 +116,10 @@ install_prometheus() {
 
   # Move files to target directories and apply permissions
   sudo cp {prometheus,promtool} /usr/local/bin/
-  sudo chown prometheus:prometheus /usr/local/bin/{prometheus,promtool}
   sudo cp -r {consoles,console_libraries} /etc/prometheus/
   sudo cp prometheus.yml /etc/prometheus/
-  sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/
-  sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/
+  sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
+  sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
 
   # Create the service file
   echo "Creating the service file"
@@ -138,13 +150,14 @@ install_prometheus() {
     echo ""
     echo "[Install]"
     echo "WantedBy=multi-user.target"
-  } >prometheus.service
+  } > prometheus.service
 
   # Initialize the service
   sudo cp prometheus.service /etc/systemd/system/prometheus.service
   sudo systemctl daemon-reload
   sudo systemctl start prometheus
   sudo systemctl enable prometheus
+  cd ..
 
   # Print footer
   echo ""
@@ -160,6 +173,7 @@ install_prometheus() {
   echo ""
 
   exit 0
+  
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -168,8 +182,7 @@ install_prometheus() {
 get_environment
 
 # Checks input arguments
-if [ $# -ne 0 ]
-then
+if [ $# -ne 0 ]; then
   case $1 in
     --1) # Install Prometheus
       install_prometheus
