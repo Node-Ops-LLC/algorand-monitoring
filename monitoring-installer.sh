@@ -33,7 +33,7 @@ usage () {
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
-# Checks for presence of required commands, and attempts to install them if missing
+# Checks for required commands
 check_reqs () {
 
   # Check for curl
@@ -55,7 +55,7 @@ check_reqs () {
 # Checks for supported environments
 get_environment() {
 
-  # Check system requirements
+  # Check for required commands
   check_reqs
   
   # Get operating environment
@@ -98,12 +98,12 @@ install_prometheus() {
   if [[ $(wget -S --spider "${promFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
     echo "Prometheus install archive found: $promFileName"
   else
-    echo "Unable to find Prometheus install archive. Exiting."
+    echo "Unable to find Prometheus install archive"
     exit
   fi
 
   # Download and extract the latest release
-  echo "Attempting to download: ${promFileName}"
+  echo "Downloading: ${promFileName}"
   wget -nv --show-progress -O prometheus.tar.gz "${promFileName}"
   sudo mkdir -pm744 prometheus
   tar -xvf prometheus.tar.gz -C prometheus --strip-components=1
@@ -127,13 +127,11 @@ install_prometheus() {
 
   # Move files to target directories and apply permissions
   sudo cp {prometheus,promtool} /usr/local/bin/
-  sudo cp -r {consoles,console_libraries} /etc/prometheus/
-  sudo cp prometheus.yml /etc/prometheus/
+  sudo cp -r {consoles,console_libraries,prometheus.yml} /etc/prometheus/
   sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
   sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
 
   # Create the service file
-  echo "Creating the service file"
   {
     echo "[Unit]"
     echo "Description=Prometheus"
@@ -164,6 +162,7 @@ install_prometheus() {
   } > prometheus.service
 
   # Initialize the service
+  echo "Initializing service"
   sudo cp prometheus.service /etc/systemd/system/prometheus.service
   sudo systemctl daemon-reload
   sudo systemctl start prometheus
@@ -203,12 +202,12 @@ install_node_exporter() {
   if [[ $(wget -S --spider "${nodeExFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
     echo "Node Exporter install archive found: $nodeExFileName"
   else
-    echo "Unable to find Node Exporter install archive. Exiting."
+    echo "Unable to find Node Exporter install archive"
     exit
   fi
   
   # Download and extract the latest release
-  echo "Attempting to download: ${nodeExFileName}"
+  echo "Downloading: ${nodeExFileName}"
   wget -nv --show-progress -O node_exporter.tar.gz "${nodeExFileName}"
   sudo mkdir -pm744 node_exporter
   tar -xvf node_exporter.tar.gz -C node_exporter --strip-components=1
@@ -224,7 +223,6 @@ install_node_exporter() {
 
   # Create the service file
   # REF: https://github.com/prometheus/node_exporter#node-exporter
-  echo "Creating the service file"
   {
     echo "[Unit]"
     echo "Description=Node Exporter"
@@ -274,12 +272,14 @@ install_node_exporter() {
   } > node_exporter.service
   
   # Initialize the service
+  echo "Initializing service"
   sudo cp node_exporter.service /etc/systemd/system/node_exporter.service
   sudo systemctl daemon-reload
   sudo systemctl start node_exporter
   sudo systemctl enable node_exporter
   
   # Update Prometheus configuration
+  echo "Configuring Prometheus"
   cp /etc/prometheus/prometheus.yml .
   {
     echo ""
@@ -325,6 +325,7 @@ install_grafana() {
 
   # Get the latest release
   # REF: https://grafana.com/docs/grafana/latest/setup-grafana/installation/debian/
+  echo "Installing package"
   sudo apt-get install -y software-properties-common wget
   sudo wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key
   echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
@@ -332,6 +333,7 @@ install_grafana() {
   sudo apt-get install grafana-enterprise -y
 
   # Configure the Prometheus datasource
+  echo "Configuring data source"
   {
     echo "apiVersion: 1"
     echo ""
@@ -347,7 +349,7 @@ install_grafana() {
   } > prom.yaml
   sudo cp prom.yaml /etc/grafana/provisioning/datasources/
 
-  echo "Starting Grafana service..."
+  echo "Initializing service"
   sudo systemctl daemon-reload
   sudo systemctl start grafana-server
   sudo systemctl enable grafana-server.service
