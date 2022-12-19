@@ -178,6 +178,180 @@ install_prometheus() {
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
+# Installs Node Exporter
+install_node_exporter() {
+
+  # Print header
+  echo;
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Node Exporter";
+  echo;
+
+  # Get the latest release
+  nodeExFileName="$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
+  if [[ $(wget -S --spider "${nodeExFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+    echo "Node Exporter install archive found: $nodeExFileName"
+  else
+    echo "Unable to find Node Exporter install archive. Exiting."
+    exit
+  fi
+  
+  # Download and extract the latest release
+  echo "Attempting to download: ${nodeExFileName}"
+  wget -nv --show-progress -O node_exporter.tar.gz "${nodeExFileName}"
+  sudo mkdir -pm744 node_exporter
+  tar -xvf node_exporter.tar.gz -C node_exporter --strip-components=1
+  cd node_exporter
+
+  # Add directory
+  sudo mkdir -pm744 /etc/prometheus/node_exporter/collector_textfile
+
+  # Move files to target directories and apply permissions
+  sudo cp node_exporter /usr/local/bin
+  sudo chown -R prometheus:prometheus /usr/local/bin/node_exporter /etc/prometheus/
+  sudo chmod -R 744 /usr/local/bin/node_exporter /etc/prometheus/
+
+  # Create the service file
+  # REF: https://github.com/prometheus/node_exporter#node-exporter
+  echo "Creating the service file"
+  {
+    echo "[Unit]"
+    echo "Description=Node Exporter"
+    echo "Documentation=https://github.com/prometheus/node_exporter"
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo ""
+    echo "[Service]"
+    echo "Type=simple"
+	  echo "Restart=always"
+    echo "User=prometheus"
+    echo "Group=prometheus"
+    echo "SyslogIdentifier=node_exporter"
+    echo "ExecReload=/bin/kill -HUP \$MAINPID"
+    echo "ExecStart=/usr/local/bin/node_exporter \\"
+    echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
+    echo "  --web.telemetry-path=\"/metrics\" \\"
+	  echo "  --collector.disable-defaults \\"
+    echo "  --collector.bonding \\"
+	  echo "  --collector.conntrack \\"
+    echo "  --collector.cpu \\"
+    echo "  --collector.diskstats \\"
+    echo "  --collector.filefd \\"
+    echo "  --collector.filesystem \\"
+    echo "  --collector.hwmon \\"
+    echo "  --collector.loadavg \\"
+    echo "  --collector.mdadm \\"
+    echo "  --collector.meminfo \\"
+    echo "  --collector.netclass \\"
+    echo "  --collector.netdev \\"
+    echo "  --collector.netstat \\"
+    echo "  --collector.nvme \\"
+    echo "  --collector.os \\"
+    echo "  --collector.powersupplyclass \\"
+    echo "  --collector.processes \\"
+    echo "  --collector.systemd \\"
+	  echo "  --collector.textfile \\"
+    echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
+    echo "  --collector.thermal \\"
+    echo "  --collector.time \\"
+    echo "  --collector.uname \\"
+    echo "  --collector.vmstat \\"
+    echo "  --collector.zfs"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+  } > node_exporter.service
+  
+  # Initialize the service
+  sudo cp node_exporter.service /etc/systemd/system/node_exporter.service
+  sudo systemctl daemon-reload
+  sudo systemctl start node_exporter
+  sudo systemctl enable node_exporter
+  
+  # Update Prometheus configuration
+  cp /etc/prometheus/prometheus.yml .
+  {
+    echo ""
+    echo "  - job_name: 'algod-metrics'"
+    echo "    metrics_path: '/metrics'"
+    echo "    static_configs:"
+    echo "      - targets: ['localhost:9100']" # This default algod endpoint probably has all the metrics you would need to monitor the node
+	  echo "        labels:"
+	  echo "          alias: 'algod'"
+	  echo ""
+    echo "  - job_name: 'node-metrics'"
+	  echo "    scrape_interval: 5s"
+	  echo "    metrics_path: '/metrics'"
+    echo "    static_configs:"
+    echo "      - targets: ['localhost:9101']"
+    echo "        labels:"
+    echo "          alias: 'node'"
+	  echo ""
+  } >> prometheus.yml
+  sudo cp prometheus.yml /etc/prometheus/
+  sudo systemctl restart prometheus
+  cd ..
+
+  # Print footer
+  echo ""
+  echo "Node Exporter is installed!"
+  echo ""
+  echo "Please verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status node_exporter"
+  echo ""
+  echo "You can check metrics using this endpoint:"
+  echo "  http://your-node-host-ip:9101/metrics"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+
+  exit 0
+  
+}
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Installs Grafana
+install_grafana() {
+
+  # Print header
+  echo;
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Grafana";
+  echo;
+
+  # Get the latest release
+  # REF: https://grafana.com/docs/grafana/latest/setup-grafana/installation/debian/
+  sudo apt-get install -y software-properties-common wget
+  sudo wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key
+  echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
+  sudo apt-get update -y
+  sudo apt-get install grafana-enterprise -y
+
+  echo "Starting Grafana service..."
+  sudo systemctl daemon-reload
+  sudo systemctl start grafana-server
+  sudo systemctl enable grafana-server.service
+
+  # Print footer
+  echo ""
+  echo "Grafana is installed!"
+  echo ""
+  echo "Please verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status grafana-server"
+  echo ""
+  echo "You can view the interface using this endpoint:"
+  echo "  http://your-node-host-ip:3000"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+
+  exit 0
+
+}
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
 # Checks the operating environment
 get_environment
 
