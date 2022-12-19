@@ -21,13 +21,12 @@ usage () {
   echo "Usage: $0 [--1|--2|--3|--4|--help]"
   echo ""
   echo "Options:"
-  echo "   --help   Shows this message"
-  echo "   --1      Step 1: Installs Prometheus"
-  echo "   --2      Step 2: Installs Node Exporter"
-  echo "   --3      Step 3: Installs Grafana"
-  echo "   --4      Step 4: Installs Algorand dashboards"
+  echo "   --help   Show the help menu"
+  echo "   --1      Step 1: Install Prometheus"
+  echo "   --2      Step 2: Install Node Exporter"
+  echo "   --3      Step 3: Install Grafana"
+  echo "   --4      Step 4: Install Algorand dashboards"
   echo ""
-  echo "When run without any options, this script will download and install the latest version of the Algorand dashboards."
 
 }
 
@@ -55,7 +54,7 @@ check_reqs () {
 # Checks for supported environments
 get_environment() {
 
-  # Check for required commands
+  # Check system requirements
   check_reqs
   
   # Get operating environment
@@ -65,8 +64,7 @@ get_environment() {
   # Check operating system compatibility
   if [ "$foundOS" != "Linux" ]; then
     echo "Unsupported operating system: $foundOS!"
-    echo "Exiting."
-    exit
+    (exit 1)
   fi
   
   # Check system architecture compatibility
@@ -76,8 +74,7 @@ get_environment() {
     getArch="amd64" # Running on intel/amd
   else
     echo "Unsupported architecture: $foundArch!"
-    echo "Exiting."
-    exit
+    (exit 1)
   fi
 
 }
@@ -99,7 +96,7 @@ install_prometheus() {
     echo "Prometheus install archive found: $promFileName"
   else
     echo "Unable to find Prometheus install archive"
-    exit
+    (exit 1)
   fi
 
   # Download and extract the latest release
@@ -182,8 +179,6 @@ install_prometheus() {
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
 
-  exit 0
-  
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -203,7 +198,7 @@ install_node_exporter() {
     echo "Node Exporter install archive found: $nodeExFileName"
   else
     echo "Unable to find Node Exporter install archive"
-    exit
+    (exit 1)
   fi
   
   # Download and extract the latest release
@@ -238,7 +233,7 @@ install_node_exporter() {
     echo "SyslogIdentifier=node_exporter"
     echo "ExecReload=/bin/kill -HUP \$MAINPID"
     echo "ExecStart=/usr/local/bin/node_exporter \\"
-    echo "  --web.listen-address=:9101 \\" # Note: Algorand already uses 9100 for its default metrics endpoint, so use 9101
+    echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
     echo "  --web.telemetry-path=\"/metrics\" \\"
     echo "  --collector.disable-defaults \\"
     echo "  --collector.bonding \\"
@@ -307,8 +302,6 @@ install_node_exporter() {
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
-
-  exit 0
   
 }
 
@@ -331,6 +324,8 @@ install_grafana() {
   echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
   sudo apt-get update -y
   sudo apt-get install grafana-enterprise -y
+  sudo mkdir -pm744 grafana
+  cd grafana  
 
   # Configure the Prometheus datasource
   echo "Configuring data source"
@@ -348,11 +343,14 @@ install_grafana() {
     echo "    editable: false"
   } > prom.yaml
   sudo cp prom.yaml /etc/grafana/provisioning/datasources/
+  sudo chown -R root:grafana /etc/grafana/provisioning/datasources/
+  sudo chmod -R 755 /etc/grafana/provisioning/datasources/
 
   echo "Initializing service"
   sudo systemctl daemon-reload
   sudo systemctl start grafana-server
   sudo systemctl enable grafana-server.service
+  cd ..
 
   # Print footer
   echo ""
@@ -367,7 +365,10 @@ install_grafana() {
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
 
-  exit 0
+}
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+# GRAFANA DASHBOARDS FOR ALGORAND
 
 }
 
@@ -376,33 +377,30 @@ install_grafana() {
 # Checks the operating environment
 get_environment
 
-# Checks input arguments
-if [ $# -ne 0 ]; then
+# Check input argument
+if [ -z $1 ]; then
+  echo "Please choose an option"
+else
   case $1 in
     --1) # Install Prometheus
       install_prometheus
-      exit 0
-      ;;
+      (exit 0);;
     --2) # Install Node Exporter
       install_node_exporter
-      exit 0
-      ;;
+      (exit 0);;
     --3) # Install Grafana
       install_grafana
-      exit 0
-      ;;
+      (exit 0);;
     --4) # Install Algorand dashboards
       install_dashboards
-      exit 0
-      ;;
+      (exit 0);;
     --help) # Print usage
       usage
-      exit 0
-      ;;
+      (exit 0);;
+	*) # Any other argument
+	  echo "Please choose a supported option"
+	  (exit 1);;
   esac
 fi
 
-# Performs the default action if no input is supplied
-install_dashboards
-
-exit 0
+(exit 0)
