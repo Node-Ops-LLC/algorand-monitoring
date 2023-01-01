@@ -2,7 +2,7 @@
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 #
-# Installs monitoring tools for Algorand node runners: Prometheus, Node Exporter, Grafana, and dashboards
+# Installs monitoring tools for Algorand node runners: Prometheus, Node Exporter, Algod Metrics Emitter, Grafana, and dashboard
 # Tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
 # REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
 # REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
@@ -25,7 +25,7 @@ usage () {
   echo "   --1      Install Prometheus"
   echo "   --2      Install Node Exporter"
   echo "   --3      Install Algod Metrics Emitter"
-  echo "   --4      Install Push Gateway"
+  echo "   --4      Install Push Gateway" # skip this for now...
   echo "   --5      Install Grafana"
   echo "   --6      Install Algorand dashboard"
   echo ""
@@ -412,7 +412,7 @@ install_algod_metrics_emitter() {
   } | sudo -u prometheus tee ${metricEmitter}.sh > /dev/null && sudo chmod 774 *.sh
 
   # visudo --file=/etc/sudoers.d/prometheus # this is how you would manually add execution permissions using visudo
-  # The commands below would create the permissions file, but I don't think they're needed - this can always be added if it is needed
+  # The commands below would create the permissions file, but I don't think they're needed
   # {
   #   echo "root ALL=(prometheus) NOPASSWD: /etc/prometheus/node_exporter/algod_metrics_emitter.sh"
   #   echo "prometheus ALL=(algorand) NOPASSWD: /usr/bin/goal"
