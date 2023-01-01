@@ -301,6 +301,93 @@ install_node_exporter() {
   } >> prometheus.yml
   sudo cp prometheus.yml /etc/prometheus/
   sudo systemctl restart prometheus
+
+  # Create the algod metrics emitter
+  filePrefix="algod_metrics"
+  metricEmitter="${filePrefix}_emitter"
+
+  # Create metrics emitter service file
+  # REF: https://www.putorius.net/using-systemd-timers.html
+  {
+    echo "[Unit]"
+    echo "Description=\"Runs the algod service metrics emitter, publishing custom metrics to be consumed by the Prometheus Node Exporter textfile collector\""
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo "After=algorand.service"
+    echo "Requires=algorand.service"
+    echo ""
+    echo "[Service]"
+    echo "Type=simple"
+    echo "Restart=always"
+    echo "User=prometheus"
+    echo "Group=prometheus"
+    echo "SyslogIdentifier=${metricEmitter}"	
+    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metricEmitter}.sh"
+  } > ${metricEmitter}.service
+
+  # Create the metrics emitter timer file
+  {
+    echo "[Unit]"
+    echo "Description=\"Timer to run the algod service metrics emitter\""
+    echo ""
+    echo "[Timer]"
+    echo "Unit=${metricEmitter}.service"
+    echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=timers.target"
+  } > ${metricEmitter}.timer
+
+  # Move the service and timer files to systemd
+  find . -name "${metricEmitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
+  
+  # Create algod metrics emitter
+  {
+    echo '#!/bin/bash'
+    echo ""
+    echo "path=\$( cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd )"
+    echo "cd \${path}"
+    echo "dataPath=\"\${path}/collector_textfile\""
+    echo "fileName=\"${filePrefix}.prom\""
+    echo "file=\"\${dataPath}/\${fileName}\""
+    echo "tmpFile=\"\${file}.tmp\""
+    echo "lastCollected=(\$(date +%s))"
+    echo ""
+    echo "mapfile -t goalStatus < <(sudo -u algorand goal node status)"
+    echo ""
+    echo "for i in \"\${goalStatus[@]}\""
+    echo "do"
+    echo "  IFS=: read -r label metric <<< \$((tr '[:upper:]' '[:lower:]') <<< \${i})"
+    echo "  metric=\$(echo \${metric} | awk '{\$1=\$1};1' | sed 's/s\$//')"
+    echo "  case \${label} in"
+    echo "    \"last committed block\")"
+    echo "      lastBlock=\${metric};;"
+    echo "    \"time since last block\")"
+    echo "      timeSinceLastBlock=\${metric};;"
+    echo "    \"sync time\")"
+    echo "      syncTime=\${metric};;"
+    echo "    \"round for next consensus protocol\")"
+    echo "      nextConsensusRound=\${metric};;"
+    echo "  esac"
+    echo "done"	
+    echo ""
+    echo "{"
+    echo "  echo \"algod_last_block \${lastBlock}\""
+    echo "  echo \"algod_time_since_last_block \${timeSinceLastBlock}\""
+    echo "  echo \"algod_sync_time \${syncTime}\""
+    echo "  echo \"algod_next_consensus_round \${nextConsensusRound}\""
+    echo "  echo \"algod_metrics_last_collected \${lastCollected}\""
+    echo "} | tee \"\${tmpFile}\" > /dev/null"
+    echo ""
+    echo "mv -f \${tmpFile} \${file}"
+  } | sudo -u prometheus tee ${metricEmitter}.sh > /dev/null && sudo chmod 744 *.sh
+
+  # Initialize the service
+  echo "Initializing custom metrics emitter"
+  sudo systemctl daemon-reload
+  sudo systemctl start ${metricEmitter}.timer
+  sudo systemctl enable ${metricEmitter}.timer
+
   cd ..
 
   # Print footer
