@@ -18,16 +18,18 @@ set -e
 # Prints usage information
 usage () {
 
-  echo "Usage: $0 [--1|--2|--3|--4|--help]"
+  echo "Usage: $0 [--1|--2|--3|--4|--5|--6|--help]"
   echo ""
   echo "Options:"
   echo "   --help   Show the help menu"
-  echo "   --1      Step 1: Install Prometheus"
-  echo "   --2      Step 2: Install Node Exporter"
-  echo "   --3      Step 3: Install Grafana"
-  echo "   --4      Step 4: Install Algorand dashboards"
+  echo "   --1      Install Prometheus"
+  echo "   --2      Install Node Exporter"
+  echo "   --3      Install Algod Metrics Emitter"
+  echo "   --4      Install Push Gateway"
+  echo "   --5      Install Grafana"
+  echo "   --6      Install Algorand dashboard"
   echo ""
-
+ 
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -200,8 +202,8 @@ install_node_exporter() {
 
   # Check if Node Exporter is already installed
   # if command -v  node_exporter &> /dev/null; then
-    # echo "Node Exporter is already installed: $(command -v node_exporter)"
-	# (exit 1)
+  # echo "Node Exporter is already installed: $(command -v node_exporter)"
+  # (exit 1)
   # fi # This should be implemented, but the default Algod install includes node_exporter in /usr/bin/ as part of the managed package
   # This would instead need to check for node_exporter in path /usr/local/bin/
 
@@ -233,7 +235,7 @@ install_node_exporter() {
   # REF: https://github.com/prometheus/node_exporter#node-exporter
   {
     echo "[Unit]"
-    echo "Description=Node Exporter"
+    echo "Description=Prometheus Node Exporter"
     echo "Documentation=https://github.com/prometheus/node_exporter"
     echo "Wants=network-online.target"
     echo "After=network-online.target"
@@ -291,16 +293,47 @@ install_node_exporter() {
   cp /etc/prometheus/prometheus.yml .
   {
     echo ""
-    echo "  - job_name: 'node-metrics'"
+    echo "  - job_name: 'host-metrics'"
     echo "    scrape_interval: 5s"
     echo "    metrics_path: '/metrics'"
     echo "    static_configs:"
     echo "      - targets: ['localhost:9101']"
     echo "        labels:"
-    echo "          alias: 'node'"
+    echo "          alias: 'host'"
   } >> prometheus.yml
   sudo cp prometheus.yml /etc/prometheus/
   sudo systemctl restart prometheus
+
+  cd ..
+
+  # Print footer
+  echo ""
+  echo "Prometheus Node Exporter is installed!"
+  echo ""
+  echo "Verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status node_exporter"
+  echo ""
+  echo "View metrics using this endpoint:"
+  echo "  http://<your-host-ip>:9101/metrics"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+  
+}
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Installs Algod Metrics Emitter
+install_algod_metrics_emitter() {
+
+  # Print header
+  echo;
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Algod Metrics Emitter";
+  echo;
+
+  # Confirm directories are added and navigate
+  sudo mkdir -pm744 node_exporter/collector_textfile && cd node_exporter # just in case
 
   # Create the algod metrics emitter
   filePrefix="algod_metrics"
@@ -317,10 +350,6 @@ install_node_exporter() {
     echo "Requires=algorand.service"
     echo ""
     echo "[Service]"
-    echo "Type=simple"
-    echo "Restart=always"
-    echo "User=prometheus"
-    echo "Group=prometheus"
     echo "SyslogIdentifier=${metricEmitter}"	
     echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metricEmitter}.sh"
   } > ${metricEmitter}.service
@@ -377,34 +406,63 @@ install_node_exporter() {
     echo "  echo \"algod_sync_time \${syncTime}\""
     echo "  echo \"algod_next_consensus_round \${nextConsensusRound}\""
     echo "  echo \"algod_metrics_last_collected \${lastCollected}\""
-    echo "} | tee \"\${tmpFile}\" > /dev/null"
+    echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
     echo ""
     echo "mv -f \${tmpFile} \${file}"
-  } | sudo -u prometheus tee ${metricEmitter}.sh > /dev/null && sudo chmod 744 *.sh
+  } | sudo -u prometheus tee ${metricEmitter}.sh > /dev/null && sudo chmod 774 *.sh
+
+  # visudo --file=/etc/sudoers.d/prometheus # this is how you would manually add execution permissions using visudo
+  # The commands below would create the permissions file, but I don't think they're needed - this can always be added if it is needed
+  # {
+  #   echo "root ALL=(prometheus) NOPASSWD: /etc/prometheus/node_exporter/algod_metrics_emitter.sh"
+  #   echo "prometheus ALL=(algorand) NOPASSWD: /usr/bin/goal"
+  #   echo "prometheus ALL=(root) NOPASSWD: /usr/bin/tee /usr/bin/mv /etc/prometheus/node_exporter/algod_metrics_emitter.sh"
+  # } > prometheus && mv -f prometheus /etc/sudoers.d/prometheus
 
   # Initialize the service
   echo "Initializing custom metrics emitter"
   sudo systemctl daemon-reload
   sudo systemctl start ${metricEmitter}.timer
   sudo systemctl enable ${metricEmitter}.timer
+  
+  # serviceStartDtmz=$(sudo systemctl status algorand | grep 'Active' | \
+  #   sed -r 's|.*([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) ([a-zA-Z]{3}).*|\1-\2-\3T\4:\5:\6 \7|' | \
+  #   date -u +"%Y-%m-%dT%H:%M:%S%Z" -f -); \ # gets the service start datetime
+  # serviceStartMsg=$(sudo systemctl status algorand | grep "$(hostname) systemd" | cut -d : -f 4 | awk '{$1=$1};1'); \ # gets the service startup message
+  # currentDtm=$(date +"%Y-%m-%dT%H:%M:%S%Z"); \ # gets the current local datetime
+  # currentDtmz=$(date -u +"%Y-%m-%dT%H:%M:%S%Z"); \ # gets the current UTC datetime
+  # serviceUptimeSec=$( echo "$(echo ${currentDtmz} | date -u +%s.%N -f -) - $(echo ${serviceStartDtmz} | date -u +%s.%N -f -) / 1" | bc | cut -d . -f1); \ # gets the service uptime in seconds 
+  # servicePid
+  # hostName
+  # telemetryGUID
+  #
+  # HELP ledger_initblocksdb_micros µs spent
+  # TYPE ledger_initblocksdb_micros counter
+  # ledger_initblocksdb_micros{
+  #   host="algorand-relay-03.node-ops.com",
+  #   pid="1030667",
+  #   telemetry_host="5a8e55ea-35cd-4431-8b6b-b8a89af7a10f:algorand-relay-03.node-ops.com",
+  #   telemetry_instance="pRG4nxqWbDbcOVZq",
+  #   telemetry_session="a3289d52-e2e1-4afe-9212-dbe971f6c475"} 89
+  #
+  # algod process CPU
+  # algod process MEMORY
 
   cd ..
 
   # Print footer
   echo ""
-  echo "Node Exporter is installed!"
+  echo "Algod Metrics Emitter for Node Exporter is installed!"
   echo ""
   echo "Verify the service is running with the following command (q to exit):"
-  echo "  \$ sudo systemctl status node_exporter"
+  echo "  \$ sudo systemctl status algod_metrics_emitter"
   echo ""
-  echo "View metrics using this endpoint:"
-  echo "  http://your-node-host-ip:9101/metrics"
+  echo "View algod metrics using this endpoint:"
+  echo "  http://<your-host-ip>:9101/metrics"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
   
-}
-
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
 # Installs Grafana
@@ -492,10 +550,14 @@ else
       install_prometheus;;
     --2) # Install Node Exporter
       install_node_exporter;;
-    --3) # Install Grafana
+    --3) # Install Algod Metrics Emitter
+      install_algod_metrics_emitter;;
+    --4) # Install Push Gateway - skip this step for now, the install will be retained if needed in the future
+      install_push_gateway;;
+    --5) # Install Grafana
       install_grafana;;
-    --4) # Install Algorand dashboards
-      install_dashboards;;
+    --6) # Install Algorand dashboard
+      install_dashboard;;
     --help) # Print usage
       usage;;
     *) # Any other argument
