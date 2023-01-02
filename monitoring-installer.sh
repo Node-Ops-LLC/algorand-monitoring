@@ -412,7 +412,7 @@ install_algod_metrics_emitter() {
     echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
     # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
     echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -b -n 2 -d 0.2 -p \$(pidof algod) | tail -1 | awk '{print \$9,\$10}')"
+    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -b -n 2 -d 0.1 -p \$(pidof algod) | tail -1 | awk '{print \$9,\$10}')"
     echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"    
     echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
     # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
