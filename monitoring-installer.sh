@@ -1,3 +1,5 @@
+GITHUB
+
 #!/bin/bash
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -160,7 +162,7 @@ install_prometheus() {
     echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
     echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
     echo "  --web.external-url=http://localhost:9090/prometheus \\" # To secure from external access, leave the port closed
-    echo "  --web.route-prefix=/prometheus"
+    echo "  --web.route-prefix=/"
     echo ""
     echo "[Install]"
     echo "WantedBy=multi-user.target"
@@ -182,7 +184,7 @@ install_prometheus() {
   echo "  \$ sudo systemctl status prometheus"
   echo ""
   echo "Query the database using this endpoint:"
-  echo "  http://your-node-host-ip:9090/"
+  echo "  http://<your-host-ip>:9090/prometheus"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
@@ -612,7 +614,7 @@ install_grafana() {
   sudo apt-get update -y
   sudo apt-get install grafana-enterprise -y
   sudo mkdir -pm744 grafana
-  cd grafana  
+  cd grafana
 
   # Configure the Prometheus datasource
   echo "Configuring data source"
@@ -647,7 +649,7 @@ install_grafana() {
   echo "  \$ sudo systemctl status grafana-server"
   echo ""
   echo "View the interface using this endpoint:"
-  echo "  http://your-node-host-ip:3000"
+  echo "  http://<your-host-ip>:3000"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
@@ -655,11 +657,12 @@ install_grafana() {
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
-# GRAFANA DASHBOARDS FOR ALGORAND
+# GRAFANA DASHBOARD FOR ALGORAND
 
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+# Main
 
 # Checks the operating environment
 get_environment
@@ -674,7 +677,7 @@ else
     --2) # Install Node Exporter
       install_node_exporter;;
     --3) # Install Algod Metrics Emitter
-      install_algod_metrics_emitter;;
+	  install_algod_metrics_emitter;;
     --4) # Install Push Gateway - skip this step for now, the install will be retained if needed in the future
       install_push_gateway;;
     --5) # Install Grafana
@@ -683,10 +686,12 @@ else
       install_dashboard;;
     --help) # Print usage
       usage;;
-    *) # Any other argument
-      echo "Please choose a supported option"
-      (exit 1);;
+	*) # Any other argument
+	  echo "Please choose a supported option"
+	  (exit 1);;
   esac
 fi
 
 (exit 0)
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
