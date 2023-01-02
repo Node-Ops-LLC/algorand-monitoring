@@ -643,7 +643,24 @@ install_grafana() {
   sudo systemctl daemon-reload
   sudo systemctl start grafana-server
   sudo systemctl enable grafana-server.service
+
   cd ..
+
+  # REF: https://github.com/grafana/grafana/issues/12638#issuecomment-479855405
+  #
+  # Important: if you blow it and lose the admin password after reset, then install sqlite3 and run the following commands to reset the password:
+  # sudo apt-get install sqlite3
+  # sudo sqlite3 /var/lib/grafana/grafana.db
+  # sqlite> update user set password = '59acf18b94d7eb0694c61e60ce44c110c7a683ac6a8f09580d626f90f4a242000746579358d77dd9e570e83fa24faa88a8a6', salt = 'F3FAxVm33R' where login = 'admin';
+  # sqlite> .exit
+  # https://jenciso.github.io/recovery-admin-password-for-grafana
+  # Now login using username:admin, password:admin and reset the admin password.
+  #
+  # Resetting the password using the grafana-cli should also be possible with the following commands:
+  # ln -s /var/lib/grafana  /usr/share/grafana/data
+  # ln -s /var/log/grafana /usr/share/grafana/data/logs
+  # cd /usr/share/grafana && sudo grafana-cli --homepath "/usr/share/grafana" admin reset-admin-password admin
+  # however, the command is bugged and fails even though it states it succeeds - don't lose your admin password!
 
   # Print footer
   echo ""
