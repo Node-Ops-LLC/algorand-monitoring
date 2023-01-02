@@ -49,6 +49,12 @@ check_reqs () {
     sudo apt-get install wget -y
   fi
 
+  # Check for bc
+  if ! command -v bc &> /dev/null; then # If bc is not found...
+    echo "bc could not be found, attempting to install..."
+    sudo apt-get install bc -y
+  fi
+
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
