@@ -337,7 +337,7 @@ install_algod_metrics_emitter() {
 
   # Create the algod metrics emitter
   filePrefix="algod_metrics"
-  metricEmitter="${filePrefix}_emitter"
+  metricsEmitter="${filePrefix}_emitter"
 
   # Create metrics emitter service file
   # REF: https://www.putorius.net/using-systemd-timers.html
@@ -350,9 +350,9 @@ install_algod_metrics_emitter() {
     echo "Requires=algorand.service"
     echo ""
     echo "[Service]"
-    echo "SyslogIdentifier=${metricEmitter}"	
-    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metricEmitter}.sh"
-  } > ${metricEmitter}.service
+    echo "SyslogIdentifier=${metricsEmitter}"	
+    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metricsEmitter}.sh"
+  } > ${metricsEmitter}.service
 
   # Create the metrics emitter timer file
   {
@@ -360,15 +360,15 @@ install_algod_metrics_emitter() {
     echo "Description=\"Timer to run the algod service metrics emitter\""
     echo ""
     echo "[Timer]"
-    echo "Unit=${metricEmitter}.service"
+    echo "Unit=${metricsEmitter}.service"
     echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
     echo ""
     echo "[Install]"
     echo "WantedBy=timers.target"
-  } > ${metricEmitter}.timer
+  } > ${metricsEmitter}.timer
 
   # Move the service and timer files to systemd
-  find . -name "${metricEmitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
+  find . -name "${metricsEmitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
   
   # Create algod metrics emitter
   {
@@ -400,16 +400,68 @@ install_algod_metrics_emitter() {
     echo "  esac"
     echo "done"	
     echo ""
+    echo "host=\$(hostname)"
+    echo "alias=\"algod\""
+    echo "job=\"algod-metrics\""
+    echo "label=\"host=\\\"${host}\\\", alias=\\\"${alias}\\\", job=\\\"${job}\\\"\""
+    echo ""
+    echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
+    echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
+    echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
+    echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
+    echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
+    # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
+    echo "label_meta=\"\${label}, algod_version=\\\"${algod_version}\\\", algod_instance=\\\"${algod_instance}\\\", algod_instance_data_dir=\\\"${algod_instance_data_dir}\\\"\""
+    echo ""
     echo "{"
-    echo "  echo \"algod_last_block \${lastBlock}\""
-    echo "  echo \"algod_time_since_last_block \${timeSinceLastBlock}\""
-    echo "  echo \"algod_sync_time \${syncTime}\""
-    echo "  echo \"algod_next_consensus_round \${nextConsensusRound}\""
-    echo "  echo \"algod_metrics_last_collected \${lastCollected}\""
+    echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
+    echo "  echo \"# TYPE algod_last_committed_block gauge\""
+    echo "  echo \"algod_last_committed_block {\${label}} \${lastBlock}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_time_since_last_block_seconds Time since the most recent block of the Algorand blockchain was received in seconds.\""
+    echo "  echo \"# TYPE algod_time_since_last_block_seconds gauge\""
+    echo "  echo \"algod_time_since_last_block_seconds {\${label}} \${timeSinceLastBlock}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_sync_time_seconds Time required to synchronize the ledger to the current Algorand blockchain state in seconds.\""
+    echo "  echo \"# TYPE algod_sync_time_seconds gauge\""
+    echo "  echo \"algod_sync_time_seconds {\${label}} \${syncTime}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_next_consensus_round The next consensus round (block) for the Algorand blockchain.\""
+    echo "  echo \"# TYPE algod_next_consensus_round gauge\""
+    echo "  echo \"algod_next_consensus_round {\${label}} \${nextConsensusRound}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_pid The current algod service process ID.\""
+    echo "  echo \"# TYPE algod_pid gauge\""
+    echo "  echo \"algod_pid {\${label_meta}} \${algod_pid}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_is_active The current active state of the algod service.\""
+    echo "  echo \"# TYPE algod_is_active gauge\""
+    echo "  echo \"algod_is_active {\${label_meta}} \${algod_is_active}\""
+    echo "  echo \"\""    
+    echo "  echo \"# HELP algod_start_timestamp_seconds Timestamp when algod service was last started in seconds since epoch (1970).\""
+    echo "  echo \"# TYPE algod_start_timestamp_seconds gauge\""
+    echo "  echo \"algod_start_timestamp_seconds {\${label_meta}} \${algod_start_timestamp_seconds}\""
+    echo "  echo \"\""    
+    echo "  echo \"# HELP algod_uptime_seconds Time in seconds since the algod service was last started.\""
+    echo "  echo \"# TYPE algod_uptime_seconds gauge\""
+    echo "  echo \"algod_uptime_seconds {\${label_meta}} \${algod_uptime_seconds}\""
+    echo "  echo \"\""    
+    echo "  echo \"# HELP algod_cpu_pct Percent CPU usage for the algod service reported by ps command.\""
+    echo "  echo \"# TYPE algod_cpu_pct gauge\""
+    echo "  echo \"algod_cpu_pct {\${label_meta}} \${algod_cpu_pct}\""
+    echo "  echo \"\""
+    echo "  echo \"# HELP algod_mem_pct Percent memory usage for the algod service reported by ps command.\""
+    echo "  echo \"# TYPE algod_mem_pct gauge\""
+    echo "  echo \"algod_mem_pct {\${label_meta}} \${algod_mem_pct}\""
+    echo "  echo \"\""    
+    echo "  echo \"# HELP algod_metrics_last_collected_timestamp_seconds Timestamp when algod metrics were last collected in seconds since epoch (1970).\""
+    echo "  echo \"# TYPE algod_metrics_last_collected_timestamp_seconds gauge\""
+    echo "  echo \"algod_metrics_last_collected_timestamp_seconds {\${label}} \${lastCollected}\""
+    echo "  echo \"\""    
     echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
     echo ""
     echo "mv -f \${tmpFile} \${file}"
-  } | sudo -u prometheus tee ${metricEmitter}.sh > /dev/null && sudo chmod 774 *.sh
+  } | sudo -u prometheus tee ${metricsEmitter}.sh > /dev/null && sudo chmod 774 *.sh
 
   # visudo --file=/etc/sudoers.d/prometheus # this is how you would manually add execution permissions using visudo
   # The commands below would create the permissions file, but I don't think they're needed
@@ -422,31 +474,8 @@ install_algod_metrics_emitter() {
   # Initialize the service
   echo "Initializing custom metrics emitter"
   sudo systemctl daemon-reload
-  sudo systemctl start ${metricEmitter}.timer
-  sudo systemctl enable ${metricEmitter}.timer
-  
-  # serviceStartDtmz=$(sudo systemctl status algorand | grep 'Active' | \
-  #   sed -r 's|.*([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) ([a-zA-Z]{3}).*|\1-\2-\3T\4:\5:\6 \7|' | \
-  #   date -u +"%Y-%m-%dT%H:%M:%S%Z" -f -); \ # gets the service start datetime
-  # serviceStartMsg=$(sudo systemctl status algorand | grep "$(hostname) systemd" | cut -d : -f 4 | awk '{$1=$1};1'); \ # gets the service startup message
-  # currentDtm=$(date +"%Y-%m-%dT%H:%M:%S%Z"); \ # gets the current local datetime
-  # currentDtmz=$(date -u +"%Y-%m-%dT%H:%M:%S%Z"); \ # gets the current UTC datetime
-  # serviceUptimeSec=$( echo "$(echo ${currentDtmz} | date -u +%s.%N -f -) - $(echo ${serviceStartDtmz} | date -u +%s.%N -f -) / 1" | bc | cut -d . -f1); \ # gets the service uptime in seconds 
-  # servicePid
-  # hostName
-  # telemetryGUID
-  #
-  # HELP ledger_initblocksdb_micros µs spent
-  # TYPE ledger_initblocksdb_micros counter
-  # ledger_initblocksdb_micros{
-  #   host="algorand-relay-03.node-ops.com",
-  #   pid="1030667",
-  #   telemetry_host="5a8e55ea-35cd-4431-8b6b-b8a89af7a10f:algorand-relay-03.node-ops.com",
-  #   telemetry_instance="pRG4nxqWbDbcOVZq",
-  #   telemetry_session="a3289d52-e2e1-4afe-9212-dbe971f6c475"} 89
-  #
-  # algod process CPU
-  # algod process MEMORY
+  sudo systemctl start ${metricsEmitter}.timer
+  sudo systemctl enable ${metricsEmitter}.timer
 
   cd ..
 
