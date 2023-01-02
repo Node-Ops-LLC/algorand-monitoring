@@ -294,6 +294,7 @@ install_node_exporter() {
   {
     echo ""
     echo "  - job_name: 'host-metrics'"
+    echo "    honor_labels: true"
     echo "    scrape_interval: 5s"
     echo "    metrics_path: '/metrics'"
     echo "    static_configs:"
@@ -491,7 +492,96 @@ install_algod_metrics_emitter() {
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
-  
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Installs Push Gateway
+install_push_gateway() {
+
+  # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusPushgatewayDropMetrics
+  # REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
+  # REF: https://prometheus.io/docs/practices/pushing/
+  # Skip this install, it's not being used for now.
+
+  # Print header
+  echo "";
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Push Gateway";
+  echo "";
+
+  # Check if Push Gateway is already installed
+  # if command -v  TKTK &> /dev/null; then
+  #   echo "TKTK is already installed: $(command -v TKTK)"
+	# (exit 1)
+  # fi
+
+  # Get the latest release
+  pushGatewaytFileName="$(curl -s https://api.github.com/repos/prometheus/pushgateway/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
+  if [[ $(wget -S --spider "${pushGatewayFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+    echo "Push Gateway install archive found: $pushGatewayFileName"
+  else
+    echo "Unable to find Push Gateway install archive"
+    (exit 1)
+  fi
+
+  # Download and extract the latest release
+  echo "Downloading: ${pushGatewayFileName}"
+  wget -nv --show-progress -O push_gateway.tar.gz "${pushGatewayFileName}"
+  sudo mkdir -pm744 push_gateway
+  tar -xvf pushGateway.tar.gz -C push_gateway --strip-components=1
+  cd push_gateway
+
+  # TKTK  # Move files to target directories and apply permissions
+  sudo cp push_gatway /usr/local/bin/
+  sudo chown -R prometheus:prometheus /usr/local/bin/push_gateway
+  sudo chmod -R 744 /usr/local/bin/push_gateway
+
+  # Create the service file
+  {
+    echo "[Unit]"
+    echo "Description=Push Gateway"
+    echo "Documentation=https://github.com/prometheus/pushgateway"
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo ""
+    echo "[Service]"
+    echo "Type=simple"
+    echo "Restart=always"
+    echo "User=prometheus"
+    echo "Group=prometheus"
+    echo "SyslogIdentifier=push_gateway"
+    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
+    echo "ExecStart=/usr/local/bin/push_gateway \\"
+    echo "  --web.listen-address=0.0.0.0:9091 \\" # API endpoint
+    echo "  --web.persistence.file=/etc/prometheus/push_gateway/cache"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+  } > push_gateway.service
+
+  # Initialize the service
+  echo "Initializing service"
+  sudo cp push_gateway.service /etc/systemd/system/push_gateway.service
+  sudo systemctl daemon-reload
+  sudo systemctl start push_gateway
+  sudo systemctl enable push_gateway
+  cd ..
+
+  # Print footer
+  echo ""
+  echo "Push Gateway is installed!"
+  echo ""
+  echo "Verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status push_gateway"
+  echo ""
+  echo "Submit metrics to this endpoint:"
+  echo "  http://<your-host-ip>:TKTK/"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+
+}
+
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
 # Installs Grafana
