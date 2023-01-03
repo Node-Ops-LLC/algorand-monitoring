@@ -165,7 +165,7 @@ install_prometheus() {
     echo "  --web.console.templates=/etc/prometheus/consoles \\"
     echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
     echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
-    echo "  --web.external-url=http://localhost:9090/prometheus \\" # To secure from external access, leave the port closed
+    echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
     echo "  --web.route-prefix=/"
     echo ""
     echo "[Install]"
@@ -188,7 +188,7 @@ install_prometheus() {
   echo "  \$ sudo systemctl status prometheus"
   echo ""
   echo "Query the database using this endpoint:"
-  echo "  http://<your-host-ip>:9090/prometheus"
+  echo "  http://<your-host-ip>:9090"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
@@ -418,7 +418,7 @@ install_algod_metrics_emitter() {
     echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
     # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
     echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -b -n 2 -d 0.1 -p \$(pidof algod) | tail -1 | awk '{print \$9,\$10}')"
+    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -b -n 1 -p \$(pidof algod) | tail -1 | awk '{print \$9,\$10}')"
     echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"    
     echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
     # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
@@ -508,10 +508,25 @@ install_algod_metrics_emitter() {
 # Installs Push Gateway
 install_push_gateway() {
 
+  # REF: https://github.com/prometheus/pushgateway
   # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusPushgatewayDropMetrics
   # REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
   # REF: https://prometheus.io/docs/practices/pushing/
-  # Skip this install, it's not being used for now.
+  # REF: https://www.metricfire.com/blog/prometheus-pushgateways-everything-you-need-to-know/
+  # You can skip this install, it's not being used for now.
+
+  # Example: https://github.com/prometheus/pushgateway
+  # This is one reason why the Push Gateway is so nice - it is very simple to push metrics to the endpoint...
+  # It also allows cached metrics to be deleted, and has other API functions - see the documentation
+  #
+  # cat << EOF | curl -X PUT --data-binary @- http://localhost:9091/metrics/job/algod-metrics/alias/algod
+  # TYPE algod_metric_example1 gauge
+  # algod_metric_example1{label="val1"} 42
+  # TYPE algod_metric_example2 gauge
+  # HELP algod_metric_example2 Just an example.
+  # algod_metric_example1 2398.283
+  # EOF
+  #
 
   # Print header
   echo "";
@@ -577,6 +592,15 @@ install_push_gateway() {
   sudo systemctl enable push_gateway
   cd ..
 
+  # Modify prometheus.yml to add the scrape target for push gateway
+  # scrape_configs:
+  # - job_name: pushgateway
+  #   honor_labels: true
+  #   static_configs:
+  #   - targets: ['localhost:9091']
+  #     labels:
+  #       pushgateway_instance: algod-??TKTK
+
   # Print footer
   echo ""
   echo "Push Gateway is installed!"
@@ -633,17 +657,20 @@ install_grafana() {
     echo "    url: http://localhost:9090"
     echo "    isDefault: true"
     echo "    version: 1"
-    echo "    editable: false"
+    echo "    editable: true"
   } > prom.yaml
   sudo cp prom.yaml /etc/grafana/provisioning/datasources/
-  sudo chown -R root:grafana /etc/grafana/provisioning/datasources/
-  sudo chmod -R 755 /etc/grafana/provisioning/datasources/
+  sudo chown -R grafana:grafana /etc/grafana/provisioning/datasources/
+  sudo chmod -R 774 /etc/grafana/provisioning/datasources/
+
+  # Install any required plugins now...
+  # sudo grafana-cli plugins install grafana-piechart-panel # this is the old plugin, there is a better one built-in now.
 
   echo "Initializing service"
   sudo systemctl daemon-reload
   sudo systemctl start grafana-server
   sudo systemctl enable grafana-server.service
-
+  
   cd ..
 
   # REF: https://github.com/grafana/grafana/issues/12638#issuecomment-479855405
@@ -678,8 +705,71 @@ install_grafana() {
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
-# GRAFANA DASHBOARD FOR ALGORAND
 
+# Installs the Algorand Monitoring Dashboard for Grafana
+install_dashboard() {
+
+  # REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
+  # REF: https://grafana.com/grafana/dashboards/10795-1-node-exporter-0-16-for-prometheus-monitoring-display-board/
+  # REF: https://medium.com/swlh/intro-to-server-monitoring-b782fc82911e
+  # The Algo dashboard is a work in progress...
+
+  # Print header
+  echo;
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Algorand Monitoring Dashboard";
+  echo;
+
+  # Verify Grafana is installed
+  if command -v grafana-server &> /dev/null; then
+
+    echo "Downloading dashboard from Github..."
+    sudo mkdir -pm744 grafana_dashboard
+    cd grafana_dashboard
+    wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/algorand_monitoring_dashboard.json
+    chown grafana:grafana *.json && chmod 744 *.json
+    sudo mkdir -p /etc/grafana/dashboards && chown grafana:grafana /etc/grafana/dashboards
+    sudo cp *.json /etc/grafana/dashboards
+
+    echo "Provisioning dashboards..."
+    {
+      echo "apiVersion: 1"
+      echo ""
+      echo "providers:"
+      echo "  - name: 'Algorand Monitoring Dashboard'"
+      echo "    orgId: 1"
+      echo "    folder: ''"
+      echo "    folderUid: ''"
+      echo "    type: file"
+      echo "    disableDeletion: false"
+      echo "    updateIntervalSeconds: 30"
+      echo "    allowUiUpdates: true"
+      echo "    options:"
+      echo "      path: /etc/grafana/dashboards"
+      echo "      foldersFromFilesStructure: true"
+    } > algorand_monitoring_dashboard.yaml && chown grafana:grafana *.yaml && chmod 744 *.yaml
+    sudo cp *.yaml /etc/grafana/provisioning/dashboards/
+
+    sudo systemctl restart grafana-server
+    cd..
+
+  else
+  
+    echo "Grafana is not installed!"
+    (exit 1)
+
+  fi
+
+  # Print footer
+  echo ""
+  echo "Grafana Dashboard is installed!"
+  echo ""
+  echo "Verify the dashboard is installed by accessing Grafana:"
+  echo "  http://<your-host-ip>:3000"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+  
 }
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -698,7 +788,7 @@ else
     --2) # Install Node Exporter
       install_node_exporter;;
     --3) # Install Algod Metrics Emitter
-	  install_algod_metrics_emitter;;
+      install_algod_metrics_emitter;;
     --4) # Install Push Gateway - skip this step for now, the install will be retained if needed in the future
       install_push_gateway;;
     --5) # Install Grafana
