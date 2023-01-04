@@ -637,6 +637,33 @@ install_grafana() {
   sudo chown -R grafana:grafana /etc/grafana/provisioning/datasources/
   sudo chmod -R 774 /etc/grafana/provisioning/datasources/
 
+  # Create the geojson file
+  geojson_path="/usr/share/grafana/public/maps"
+  geojson_file="node.geojson"
+  host=$(hostname)
+  location="Forest Hill, Maryland"
+  longitude="-76.387672"
+  latitude="39.585030"
+  ip_address="0.0.0.0"
+  provider="My_Hosting_Provider"
+
+  {
+    echo "{"
+    echo "  \"type\":\"FeatureCollection\","
+    echo "  \"features\":["
+    echo "    { \"type\":\"Feature\","
+    echo "      \"id\":\"Node\","
+    echo "      \"properties\": {"
+    echo "        \"Host\": \"${host}\","
+    echo "        \"Location\":\"${location}\","
+    echo "        \"IP Address\": \"${ip_address}\","
+    echo "        \"Provider\": \"${provider}\" },"
+    echo "      \"geometry\": {"
+    echo "        \"type\":\"Point\","
+    echo "        \"coordinates\": [${longitude},${latitude}] }}]"
+    echo "}"
+  } > ${geojson_file} && cp ${geojson_file} ${geojson_path}
+
   # Install any required plugins now...
 
   echo "Initializing service"
