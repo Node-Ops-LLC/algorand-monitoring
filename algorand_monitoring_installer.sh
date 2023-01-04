@@ -404,7 +404,7 @@ install_algod_metrics_emitter() {
     echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"    
     echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
     # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
-    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\"\""
+    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
     echo ""
     echo "{"
     echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
