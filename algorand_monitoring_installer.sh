@@ -257,8 +257,10 @@ install_node_exporter() {
     echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
     echo "  --web.telemetry-path=\"/metrics\" \\"
     echo "  --collector.disable-defaults \\"
-    echo "  --collector.bonding \\"
-    echo "  --collector.conntrack \\"
+    echo "  --collector.textfile \\"
+    echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
+    echo "  --collector.bonding \\" # starting from this entry down, we could eliminate everything that is duplicated on 9100 - but only if telemetry is enabled!
+    echo "  --collector.conntrack \\" # note: I never went through to determine which of these collectors is enabled for 9100, but it might be a good idea to eliminate the dups for performance and storage conservation...
     echo "  --collector.cpu \\"
     echo "  --collector.diskstats \\"
     echo "  --collector.filefd \\"
@@ -275,8 +277,6 @@ install_node_exporter() {
     echo "  --collector.powersupplyclass \\"
     echo "  --collector.processes \\"
     echo "  --collector.systemd \\"
-    echo "  --collector.textfile \\"
-    echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
     echo "  --collector.thermal \\"
     echo "  --collector.time \\"
     echo "  --collector.uname \\"
@@ -392,7 +392,7 @@ install_algod_metrics_emitter() {
     echo "done"	
     echo ""
     echo "host=\$(hostname)"
-    echo "label=\"host=\\\"${host}\\\""
+    echo "label=\"host=\\\"${host}\\\"\""
     echo ""
     echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
     # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
