@@ -128,12 +128,12 @@ install_prometheus() {
   # Modify the configuration file to scrape the Algod metrics endpoint
   {
     echo ""
-    echo "  - job_name: 'algod-metrics'"
+    echo "  - job_name: 'node-metrics'"
     echo "    metrics_path: '/metrics'"
     echo "    static_configs:"
-    echo "      - targets: ['localhost:9100']"
+    echo "      - targets: ['localhost:9100'], ['localhost:9101']" # if either one of the targets fails, for example if telemetry is not enabled, then this will still work
     echo "        labels:"
-    echo "          alias: 'algod'"
+    echo "          alias: 'node'"
   } >> prometheus.yml
 
   # Move files to target directories and apply permissions
@@ -293,22 +293,6 @@ install_node_exporter() {
   sudo systemctl daemon-reload
   sudo systemctl start node_exporter
   sudo systemctl enable node_exporter
-  
-  # Update Prometheus configuration
-  echo "Configuring Prometheus"
-  cp /etc/prometheus/prometheus.yml .
-  {
-    echo ""
-    echo "  - job_name: 'host-metrics'"
-    echo "    honor_labels: true"
-    echo "    scrape_interval: 5s"
-    echo "    metrics_path: '/metrics'"
-    echo "    static_configs:"
-    echo "      - targets: ['localhost:9101']"
-    echo "        labels:"
-    echo "          alias: 'host'"
-  } >> prometheus.yml
-  sudo cp prometheus.yml /etc/prometheus/
   sudo systemctl restart prometheus
 
   cd ..
@@ -408,9 +392,7 @@ install_algod_metrics_emitter() {
     echo "done"	
     echo ""
     echo "host=\$(hostname)"
-    echo "alias=\"algod\""
-    echo "job=\"algod-metrics\""
-    echo "label=\"host=\\\"${host}\\\", alias=\\\"${alias}\\\", job=\\\"${job}\\\"\""
+    echo "label=\"host=\\\"${host}\\\""
     echo ""
     echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
     # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
@@ -473,14 +455,6 @@ install_algod_metrics_emitter() {
     echo ""
     echo "mv -f \${tmpFile} \${file}"
   } | sudo -u prometheus tee ${metricsEmitter}.sh > /dev/null && sudo chmod 774 *.sh
-
-  # visudo --file=/etc/sudoers.d/prometheus # this is how you would manually add execution permissions using visudo
-  # The commands below would create the permissions file, but I don't think they're needed
-  # {
-  #   echo "root ALL=(prometheus) NOPASSWD: /etc/prometheus/node_exporter/algod_metrics_emitter.sh"
-  #   echo "prometheus ALL=(algorand) NOPASSWD: /usr/bin/goal"
-  #   echo "prometheus ALL=(root) NOPASSWD: /usr/bin/tee /usr/bin/mv /etc/prometheus/node_exporter/algod_metrics_emitter.sh"
-  # } > prometheus && mv -f prometheus /etc/sudoers.d/prometheus
 
   # Initialize the service
   echo "Initializing custom metrics emitter"
@@ -664,7 +638,6 @@ install_grafana() {
   sudo chmod -R 774 /etc/grafana/provisioning/datasources/
 
   # Install any required plugins now...
-  # sudo grafana-cli plugins install grafana-piechart-panel # this is the old plugin, there is a better one built-in now.
 
   echo "Initializing service"
   sudo systemctl daemon-reload
@@ -684,7 +657,7 @@ install_grafana() {
   # Now login using username:admin, password:admin and reset the admin password.
   #
   # Resetting the password using the grafana-cli should also be possible with the following commands:
-  # ln -s /var/lib/grafana  /usr/share/grafana/data
+  # ln -s /var/lib/grafana  /usr/share/grafana/data # creates a link
   # ln -s /var/log/grafana /usr/share/grafana/data/logs
   # cd /usr/share/grafana && sudo grafana-cli --homepath "/usr/share/grafana" admin reset-admin-password admin
   # however, the command is bugged and fails even though it states it succeeds - don't lose your admin password!
@@ -736,7 +709,7 @@ install_dashboard() {
       echo "apiVersion: 1"
       echo ""
       echo "providers:"
-      echo "  - name: 'Algorand Monitoring Dashboard'"
+      echo "  - name: 'Algorand Node Monitoring Dashboard'"
       echo "    orgId: 1"
       echo "    folder: ''"
       echo "    folderUid: ''"
@@ -747,10 +720,13 @@ install_dashboard() {
       echo "    options:"
       echo "      path: /etc/grafana/dashboards"
       echo "      foldersFromFilesStructure: true"
-    } > algorand_monitoring_dashboard.yaml && chown grafana:grafana *.yaml && chmod 744 *.yaml
+    } > algorand_node_monitoring_dashboard.yaml && chown grafana:grafana *.yaml && chmod 744 *.yaml
     sudo cp *.yaml /etc/grafana/provisioning/dashboards/
 
+    echo "Restarting service"
+    sudo systemctl daemon-reload
     sudo systemctl restart grafana-server
+
     cd..
 
   else
@@ -797,9 +773,9 @@ else
       install_dashboard;;
     --help) # Print usage
       usage;;
-	*) # Any other argument
-	  echo "Please choose a supported option"
-	  (exit 1);;
+    *) # Any other argument
+      echo "Please choose a supported option"
+      (exit 1);;
   esac
 fi
 
