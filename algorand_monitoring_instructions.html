@@ -1,148 +1,228 @@
 <!DOCTYPE html>
 <html>
+
 	<head>
+
 		<title>Monitoring Your Algorand Node</title>
+
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<meta name="description" content="This page contains instructions for installing and configuring the tools needed to monitor your Algorand node.">
 		<meta name="keywords" content="Algorand, Node, Prometheus, Node Exporter, Grafana">
+
 		<style>
+
 			h1 {
 				font-family: Arial, sans-serif;
-				color: #000000;
-				text-align: default;
-			}
+            font-size: 18px;
+            text-align: default;
+            text-decoration: underline;
+				color: #000000; }
 			p {
 				font-family: Arial, sans-serif;
 				font-size: 14px;
 				text-align: default;
 				color: #000000;
-			}
-		</style>
+            margin-bottom: 0px; }
+         ul { margin-top: 0px; }
+			li {
+				font-family: Arial, sans-serif;
+				font-size: 14px;
+				text-align: default;
+				color: #000000; }
+			a {
+				font-family: Arial, sans-serif;
+				font-size: 14px;
+				text-align: default;
+            text-decoration: underline;
+				color: #1000bb; }
+         pre {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            color: #000000;
+            padding: 0px;
+            border: 0px; }
+         .in {
+            margin-left: 2%; }
+
+      </style>
+
 	</head>
+
 	<body>
+
 		<h1>Introduction</h1>
+
 		<p>
-         Nodes in the Algorand network are comprised of two distinct types, relays and non-relays. For a complete description of the various configurations and their use-cases, see the following link: https://developer.algorand.org/docs/run-a-node/setup/types/. Whether a node is participating in consensus, supporting a dApp, or acting as a MainNet relay, it is important to keep it online and in service. While there are a variety of tools - open-source or paid - that could be combined effectively, we focus on widely-used open-source software and services that can achieve reliable results in the Linux operating environment. The tools used in this guide consume minimal resources, and will work on almost any hardware.
+         Nodes in the Algorand network are comprised of two distinct types, relays and non-relays. For a complete description of the various configurations and their use-cases, see the following link: <a href="https://developer.algorand.org/docs/run-a-node/setup/types/">https://developer.algorand.org/docs/run-a-node/setup/types/</a>. Whether a node is participating in consensus, supporting a dApp, or acting as a MainNet relay, it is important to keep it online and in service. While there are a variety of tools - open-source or paid - that could be combined effectively, we focus on widely-used open-source software and services that can achieve reliable results in the Linux operating environment. The tools used in this guide consume minimal resources, and will work on almost any hardware.
       </p>
+
       <p>
          Our monitoring solution combines Prometheus, Node Exporter, Push Gateway, and Grafana. Prometheus is a time-series database that efficiently stores metrics from a variety of sources. Node Exporter collects hardware and kernel metrics from the host and exposes them to Prometheus. Push Gateway provides a REST endpoint that allows service-level metrics to be cached and consumed by Prometheus. Grafana is an open-source visualization platform with a suite of related tools that can use Prometheus as a data source.
          <ul>
-            <li>Prometheus to store time-series data</li>
-            <li>Node Exporter to monitor host metrics</li>
-            <li>Push Gateway to cache service metrics</li>
-            <li>Grafana to present and visualize the data</li>
+            <li><a href="https://prometheus.io/">Prometheus</a> to store time-series data</li>
+            <li><a href="https://github.com/prometheus/node_exporter">Node Exporter</a> to monitor host metrics</li>
+            <li><a href="https://github.com/prometheus/pushgateway">Push Gateway</a> to cache service metrics</li>
+            <li><a href="https://grafana.com/">Grafana</a> to present and visualize the data</li>
          </ul>
       </p>
+
       <p>
-         This combination of tools provides the core functionality of an “observability stack” that can be expanded to include logs, traces, alerts, and other capabilities. The toolset configured in this guide provides near-real-time performance monitoring for your node from any web client. These tools can also assist with troubleshooting through data discovery - for example by allowing the observation of historical trends prior to an event. If you configure alerting, you can also be proactively informed when metrics exceed critical thresholds, potentially avoiding failures before they occur, or significantly reducing your response time after a failure.
+         This combination of tools provides the core functionality of an “observability stack” that can be expanded to include logs, traces, alerts, and other capabilities. The toolset configured in this guide provides near-real-time performance monitoring for your node from any web client. These tools can also assist with troubleshooting through data discovery - for example by allowing the observation of historical trends prior to an event. If you configure alerting, you can also be proactively informed when metrics exceed critical thresholds, potentially avoiding failures before they occur, or significantly reducing your response time after a failure
       </p>
+
       <p>In order to proceed, you must have:
          <ul>
-            <li>A configured Algorand node running Ubuntu</li>
+            <li>A configured <a href="https://developer.algorand.org/docs/run-a-node/setup/install/">Algorand node</a> running <a href="https://help.ubuntu.com/20.04/installation-guide/index.html">Ubuntu</a></li>
             <li>Shell access to the host machine with administrative privileges</li>
          </ul>
       </p>
+
       <p>
-         The steps in this guide should work with some modification for other Linux distributions and MacOS. It is possible to host an Algorand node on Windows, and these tools will also run in that environment, if Windows Exporter is substituted for Node Exporter. However, the installation steps and dashboard would require significant modification. An alternative would be to use InfluxDB, Telegraf, and Grafana.
+         The steps in this guide should work with some modification for other Linux distributions and MacOS. It is possible to host an Algorand node on <a href="https://github.com/randlabs/algorand-windows-node/">Windows</a>, and these tools will also run in that environment, if <a href="https://github.com/prometheus-community/windows_exporter">Windows Exporter</a> is substituted for Node Exporter. However, the installation steps and dashboard would require significant modification. An alternative would be to use <a href="https://devconnected.com/monitoring-windows-services-with-grafana-influxdb-%e2%80%8e-telegraf/">InfluxDB, Telegraf, and Grafana</a>.
       </p>
+
       <p>
-         The purpose of this guide is to present a simplified and functional method to monitor your node or nodes. There are of course other options that could be explored. For example, InfluxDB could be used instead of Prometheus, and Netdata to collect host metrics instead of Node Exporter. You could also set up alerts that trigger when metrics cross defined thresholds, using Prometheus Alert Manager and Grafana Alerting. If your node doesn't have much storage or compute capacity, or if you have several nodes to monitor at once, you could opt to use Grafana Cloud for both storage and visualization instead of locally-hosted instances of those services. Feel free to experiment with more advanced configurations to achieve your specific goals.
+         The purpose of this guide is to present a simplified and functional method to monitor your node or nodes. There are of course other options that could be explored. For example, <a href="https://docs.influxdata.com/influxdb/v2.6/install/">InfluxDB</a> could be used instead of Prometheus, and <a href="https://learn.netdata.cloud/docs/agent/packaging/installer/methods/kickstart">Netdata</a> to collect host metrics instead of Node Exporter. You could also set up alerts that trigger when metrics cross defined thresholds, using <a href="https://prometheus.io/docs/alerting/latest/overview/">Prometheus Alert Manager</a> and <a href="https://grafana.com/docs/grafana/latest/alerting/">Grafana Alerting</a>. If your node doesn't have much storage or compute capacity, or if you have several nodes to monitor at once, you could opt to use <a href="https://grafana.com/products/cloud/">Grafana Cloud</a> for both storage and visualization instead of locally-hosted instances of those services. Feel free to experiment with more advanced configurations to achieve your specific goals.
       </p>
+
       <p>
          None of the software used in this guide is known to create specific security risks, but always exercise caution and follow best practices to properly secure your host. Make sure to follow each step in this guide in order, and verify each step, as directed. We recommend you strictly limit access to the ports exposed by these services, and make sure to use secure, unique and periodically-rotating passwords for any privileged accounts.
       </p>
+
       <h1>Installer Script</h1>
+      
       <p>
          We have created a shell script to simplify the process of installing the monitoring tools. To begin, first connect to your host machine, and then run the following commands:
-         
-            $ dir=algorand-monitoring; sudo mkdir -pm744 /etc/${dir}; cd /etc/${dir};
-            $ sudo wget -nd https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/monitoring-installer.sh;
-            $ sudo chmod 744 *.sh;
-         
-         Now that the script is downloaded, it can be run to install the monitoring components. Run the script once per component. To see the help menu, run the following command:
-         
-            $ ./monitoring-installer.sh --help
-            
-         The following text should display:
-         
-            Usage: ./monitoring-installer.sh [--1|--2|--3|--4|--5|--6|--help]
-            Options:
-                  --help   Show the help menu
-                  --1        Install Prometheus
-                  --2        Install Node Exporter
-                  --3        Install Algod Metrics Emitter
-                  --4        Install Push Gateway
-                  --5        Install Grafana
-                  --6        Install Algorand dashboard
       </p>
+         <p class="in">
+            $ dir=algorand-monitoring; sudo mkdir -pm744 /etc/${dir}; cd /etc/${dir};<br>
+            $ sudo wget -nd <a href="https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/monitoring-installer.sh">https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/monitoring-installer.sh</a>;<br>
+            $ sudo chmod 744 *.sh;
+         </p>
+      <p>
+         Now that the script is downloaded, it can be run to install the monitoring components. Run the script once per component. To see the help menu, run the following command:
+      </p>         
+         <p class="in">   
+            $ ./monitoring-installer.sh --help
+         </p>
+      <p>
+         The following text should display:
+      </p>
+      <pre>
+      Usage: ./monitoring-installer.sh [--1|--2|--3|--4|--5|--6|--help]
+      Options:
+         --help   Show the help menu
+         --1        Install Prometheus
+         --2        Install Node Exporter
+         --3        Install Algod Metrics Emitter
+         --4        Install Push Gateway
+         --5        Install Grafana
+         --6        Install Algorand dashboard
+      </pre>
+
       <h1>Install Prometheus</h1>
+
       <p>
          To install Prometheus using the installer script, run the following command:
-
-            $ ./monitoring-installer.sh --1
-         
-         The script will perform the steps necessary to install Prometheus on the host machine. Verify the service is running by following the instructions displayed at the end of the installation process. First, run the command:
-         
-            $ sudo systemctl status prometheus
-         
-         The service status should display:
-         
-            prometheus.service - Prometheus
-            Loaded: loaded (/etc/systemd/system/prometheus.service; enabled; vendor preset: enabled)
-            Active: active (running) since Mon 2022-12-19 21:38:44 UTC; 1 day 23h ago
-            Docs: https://prometheus.io/docs/introduction/overview/
-            Main PID: 3759528 (prometheus)
-            ...
-            
-         Next, access the query endpoint at <a>http://<your-host-ip>:9090</a> on a web browser from any external client, or by using curl or lynx on your host. The Prometheus query interface should display. Be sure to restrict access to the service port using Uncomplicated Firewall (ufw), or iptables.
       </p>
+         <p class="in">
+            $ ./monitoring-installer.sh --1
+         </p>
+      <p>
+         The script will perform the steps necessary to install Prometheus on the host machine. Verify the service is running by following the instructions displayed at the end of the installation process. First, run the command:
+      </p>
+         <p class="in">
+            $ sudo systemctl status prometheus
+         </p>
+      <p>
+         The service status should display:
+      </p>         
+         <pre>
+      prometheus.service - Prometheus
+            Loaded:  loaded (/etc/systemd/system/prometheus.service; enabled; vendor preset: enabled)
+            Active: active (running) since Tue 2023-01-03 20:23:55 UTC; 7h ago
+            Docs: https://prometheus.io/docs/introduction/overview/
+            Main PID: 3855061 (prometheus)
+            Tasks: 22 (limit: 76957)
+            Memory: 206.9M
+            CGroup: /system.slice/prometheus.service
+                  └─3855061 /usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus/ --storage.tsdb.retention.size=100GB>            
+         </pre>
+      <p>
+         Next, access the query endpoint at <a href="http://localhost:9090">http://host-ip:9090</a> on a web browser from any external client, or by using curl or lynx on your host. The Prometheus query interface should display. Be sure to restrict access to the service port using Uncomplicated Firewall (ufw), or iptables.
+      </p>
+
       <h1>Install Node Exporter</h1>
+      
       <p>
          To install Node Exporter, run the following command:
-         
-            $ ./monitoring-installer.sh --2
-         
-         The script will perform the steps necessary to install Node Exporter on the host machine, including configuring Prometheus. Verify the service is running by following the instructions displayed at the end of the installation process. You should be able to access the metrics endpoint at <a>http://<your-host-ip>:9101/metrics</a>. You should also be able to access Prometheus at <a>http://<your-host-ip>:9090</a>. Use the Metrics Explorer (the globe icon next to the query button) to view the available metrics, and run some ad-hoc queries to understand how Prometheus and Node Exporter work together. Our instance of Node Exporter includes the textfile collector, providing a simple and effective method for recording metrics using text files that contain properly-formatted data. Take note that the Algorand package installs an instance of Node Exporter in /usr/bin. We collect data from its endpoint at <a>http://<your-host-ip>:9100/metrics</a>, and also augment the available collectors by installing a separate instance of Node Exporter in /usr/local/bin, which is exposed on port 9101. If Algorand were to remove its instance of Node Exporter, then the instance we installed can be reconfigured to include any metrics needed for the dashboard.
       </p>
+         <p class="in">
+            $ ./monitoring-installer.sh --2
+         </p>
+      <p>
+         The script will perform the steps necessary to install Node Exporter on the host machine, including configuring Prometheus. Verify the service is running by following the instructions displayed at the end of the installation process. You should be able to access the metrics endpoint at <a href="http://localhost:9101">http://host-ip:9101/metrics</a>. You should also be able to access Prometheus at <a href="http://localhost:9090">http://host-ip:9090</a>. Use the Metrics Explorer (the globe icon next to the query button) to view the available metrics, and run some ad-hoc queries to understand how Prometheus and Node Exporter work together. Our instance of Node Exporter includes the textfile collector, providing a simple and effective method for recording metrics using text files that contain properly-formatted data. Take note that the Algorand package installs an instance of Node Exporter in /usr/bin. We collect data from its endpoint at <a href="http://localhost:9100/metrics">http://host-ip:9100/metrics</a>, and also augment the available collectors by installing a separate instance of Node Exporter in /usr/local/bin, which is exposed on port 9101. If Algorand were to remove its instance of Node Exporter, then the instance we installed can be reconfigured to include any metrics needed for the dashboard.
+      </p>
+
       <h1>Install Algod Metrics Emitter</h1>
+
       <p>
          The Algod Metrics Emitter is a script that has been written to scrape Algorand service-level metrics to be stored in Prometheus using Node Exporter's textfile collector. It uses a systemd timer to run every 15 seconds. Node Exporter must first be installed and properly configured. The emitter will only run if the algod service is running on the node. To install the Algod Metrics Emitter, run the following command:
-         
+      </p>         
+         <p class="in">
             $ ./monitoring-installer.sh --3
-         
+         </p>
+      <p>
          The script will perform the steps necessary to install the emitter on the host machine, including configuring the systemd service and timer. Verify the service is running by following the instructions displayed at the end of the installation process.
       </p>
+
       <h1>Install Push Gateway</h1>
+
       <p>
          The Push Gateway is an extension that allows service-level metrics to be reported from sources that cannot be scraped as a normal Prometheus data source. These metrics can be derived from short-lived jobs, services, or commands, and are reported to a REST-like endpoint. The Push Gateway will not be actively used for our monitoring stack, so this step can be skipped if you wish. To install Push Gateway, run the following command:
-         
+      </p>
+         <p class="in">
             $ ./monitoring-installer.sh --4
-         
+         </p>
+      <p>
          The script will perform the steps necessary to install Push Gateway on the host machine, including configuring Prometheus. Verify the service is running by following the instructions displayed at the end of the installation process.
       </p>
+
       <h1>Install Grafana</h1>
+
       <p>
          To install Grafana, run the following command:
-         
-            $ ./monitoring-installer.sh --5
-            
-         The script will perform the steps necessary to install Grafana on the host machine, including configuring the Prometheus data source. Verify the service is running by following the instructions displayed at the end of the installation process. You should be able to access Grafana at <a>http://<your-host-ip>:3000</a>. Log in with the username “admin” and the password “admin”. You will be prompted to set up a new password. Make sure to use a password that is complex and unique. Be certain to save your password in a password manager or other secure location, it can be difficult to recover if the password is lost. To verify your Prometheus sources are up and running, access <a>http://<your-host-ip>:9090/targets</a>. You should see your sources enabled, with the state “UP”.
       </p>
+         <p class="in">
+            $ ./monitoring-installer.sh --5
+         </p>
+      <p>
+         The script will perform the steps necessary to install Grafana on the host machine, including configuring the Prometheus data source. Verify the service is running by following the instructions displayed at the end of the installation process. You should be able to access Grafana at <a href="http://localhost:3000">http://host-ip:3000</a>. Log in with the username “admin” and the password “admin”. You will be prompted to set up a new password. Make sure to use a password that is complex and unique. Be certain to save your password in a password manager or other secure location, it can be difficult to recover if the password is lost. To verify your Prometheus sources are up and running, access <a href="http://localhost:9090/targets">http://host-ip:9090/targets</a>. You should see your sources enabled, with the state “UP”.
+      </p>
+
       <h1>Install Dashboard</h1>
+
       <p>
          To install the Algorand Dashboard, run the following command:
-
-            $ ./monitoring-installer.sh --6
-            
-         The script will perform the steps necessary to install the Algorand Dashboard in Grafana. Login to Grafana at <a>http://<your-host-ip>:3000</a> with your username and password, and verify that the dashboard displays in the dashboards list. Select the dashboard and verify the elements populate with data. Bookmark the dashboard for quicker access in the future.
-            
-            >Dashboard Screen Shot TKTK
       </p>
+         <p clas="in">
+            $ ./monitoring-installer.sh --6
+         </p>
+      <p>
+         The script will perform the steps necessary to install the Algorand Dashboard in Grafana. Login to Grafana at <a href="http://localhost:3000">http://host-ip:3000</a> with your username and password, and verify that the dashboard displays in the dashboards list. Select the dashboard and verify the elements populate with data. Bookmark the dashboard for quicker access in the future.
+      </p>
+         <p class="in">   
+            Dashboard Screen Shot TKTK
+         </p>
+
       <h1>Conclusion</h1>
+
       <p>
          This guide and the associated resources provide a simple and effective method to monitor your Algorand node - you now have a complete monitoring dashboard for a single node that can be accessed from any desktop or mobile web client. To gain a better understanding of how each service is installed and configured, step through the commands in the installation script. If you have any feedback on this guide, or issues with the script or instructions, reach out on the Node Runners channel on Algorand Discord. If you wish to experiment with more advanced configurations, feel free to discuss and share your results.
-         
+      <br><br>
          Happy node running!
       </p>
+
 	</body>
+
 </html>
