@@ -126,14 +126,26 @@ install_prometheus() {
   sudo mkdir -pm744 /etc/prometheus /var/lib/prometheus
 
   # Modify the configuration file to scrape the Algod metrics endpoint
+  # even if telemetry is not enabled, then 9101 will still work, and 9100 target will fail silently
   {
     echo ""
-    echo "  - job_name: 'node-metrics'"
-    echo "    metrics_path: '/metrics'"
+    echo "  - job_name: \"node-metrics\""
+    echo "    metrics_path: \"/metrics\""
+    echo "    honor_labels: true"
     echo "    static_configs:"
-    echo "      - targets: ['localhost:9100'], ['localhost:9101'], ['localhost:9091']" # 2 node exporter, 1 push gateway - if telemetry is not enabled, then 9101 will still work
+    echo "      - targets: [\"localhost:9100\", \"localhost:9101\", \"localhost:9091\"]" # 2 node exporter, 1 push gateway
     echo "        labels:"
-    echo "          alias: 'node'"
+    echo "          host: \"$(hostname)\"" # just brute-force it, it's pretty rare someone changes the hostname in any case...
+    # REF: https://stackoverflow.com/questions/43602153/prometheus-how-to-change-instance-name # after some investigation, this is the way... (see the simple method above)
+    # REF: https://stackoverflow.com/questions/49896956/relabel-instance-to-hostname-in-prometheus
+    # REF: https://blog.ruanbekker.com/blog/2022/05/30/prometheus-relabel-config-examples/
+    # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
+    # the config below does allow the service to start, and creates the "host2" label - but it's only getting the text "localhost", so... wah wah wahhhhh
+    # relabel_configs:
+    # - source_labels: [__address__]
+    #   regex: (.*):9101
+    #   replacement: $1" # this did work... probably need to make the targets use the hostname, that's the only way...
+    #   target_label: "host2"
   } >> prometheus.yml
 
   # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
@@ -174,7 +186,7 @@ install_prometheus() {
     echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
     echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
     echo "  --web.route-prefix=/ \\"
-    echo "  --enable-feature=expand-external-labels" # REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27
+#    echo "  --enable-feature=expand-external-labels" # REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27 # didn't seem to work anyway, maybe try some other time
     echo ""
     echo "[Install]"
     echo "WantedBy=multi-user.target"
@@ -184,10 +196,11 @@ install_prometheus() {
   echo "Configuring top command for process metrics..."
   home_dir="/etc/prometheus/top"
   config_file_dir="${home_dir}/.config/procps"
-  mkdir -f ${config_file_dir}
-  cd ${config_file_dir}
-  # copy the top config file from GitHub to /etc/prometheus/top/.config/procps/toprc  
-  # wget from GitHub to config_file_dir...
+  sudo mkdir -pm744 ${config_file_dir}
+  # get the config file from GitHub
+  wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/toprc
+  sudo mv toprc ${config_file_dir}
+  sudo chown -R prometheus:prometheus ${config_file_dir}
 
   # Initialize the service
   echo "Initializing service"
@@ -340,12 +353,15 @@ install_algod_metrics_emitter() {
   echo "Installing Algod Metrics Emitter";
   echo;
 
-  # Confirm directories are added and navigate
-  sudo mkdir -pm744 node_exporter/collector_textfile && cd node_exporter # just in case
+  # Confirm directory exists
+  target_dir="/etc/prometheus/node_exporter"
+  sudo mkdir -pm744 ${target_dir}/collector_textfile
+  sudo chown -R prometheus:prometheus ${target_dir}
+  cd node_exporter # this should already exist, could check and do all that razamatazz but nah...
 
   # Create the algod metrics emitter
-  filePrefix="algod_metrics"
-  metricsEmitter="${filePrefix}_emitter"
+  file_prefix="algod_metrics"
+  metrics_emitter="${file_prefix}_emitter"
 
   # Create metrics emitter service file
   # REF: https://www.putorius.net/using-systemd-timers.html
@@ -358,9 +374,9 @@ install_algod_metrics_emitter() {
     echo "Requires=algorand.service"
     echo ""
     echo "[Service]"
-    echo "SyslogIdentifier=${metricsEmitter}"	
-    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metricsEmitter}.sh"
-  } > ${metricsEmitter}.service
+    echo "SyslogIdentifier=${metrics_emitter}"	
+    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metrics_emitter}.sh"
+  } > ${metrics_emitter}.service
 
   # Create the metrics emitter timer file
   {
@@ -368,15 +384,15 @@ install_algod_metrics_emitter() {
     echo "Description=\"Timer to run the algod service metrics emitter\""
     echo ""
     echo "[Timer]"
-    echo "Unit=${metricsEmitter}.service"
+    echo "Unit=${metrics_emitter}.service"
     echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
     echo ""
     echo "[Install]"
     echo "WantedBy=timers.target"
-  } > ${metricsEmitter}.timer
+  } > ${metrics_emitter}.timer
 
   # Move the service and timer files to systemd
-  find . -name "${metricsEmitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
+  find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
   
   # Create algod metrics emitter
   {
@@ -385,7 +401,7 @@ install_algod_metrics_emitter() {
     echo "path=\$( cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd )"
     echo "cd \${path}"
     echo "dataPath=\"\${path}/collector_textfile\""
-    echo "fileName=\"${filePrefix}.prom\""
+    echo "fileName=\"${file_prefix}.prom\""
     echo "file=\"\${dataPath}/\${fileName}\""
     echo "tmpFile=\"\${file}.tmp\""
     echo "lastCollected=(\$(date +%s))"
@@ -474,13 +490,18 @@ install_algod_metrics_emitter() {
     echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
     echo ""
     echo "mv -f \${tmpFile} \${file}"
-  } | sudo -u prometheus tee ${metricsEmitter}.sh > /dev/null && sudo chmod 774 *.sh
+  } | sudo -u prometheus tee ${metrics_emitter}.sh > /dev/null
+
+  # Apply permissions and move script to target directory
+  sudo chmod 774 *.sh
+  sudo chown prometheus:prometheus *.sh
+  sudo cp ${metrics_emitter}.sh ${target_dir}
 
   # Initialize the service
   echo "Initializing custom metrics emitter"
   sudo systemctl daemon-reload
-  sudo systemctl start ${metricsEmitter}.timer
-  sudo systemctl enable ${metricsEmitter}.timer
+  sudo systemctl start ${metrics_emitter}.timer
+  sudo systemctl enable ${metrics_emitter}.timer
 
   cd ..
 
@@ -552,9 +573,11 @@ install_push_gateway() {
   working_dir=$(pwd)
 
   # TKTK  # Move files to target directories and apply permissions
+  sudo chmod -R 744 push_gateway
+  sudo chown -R prometheus:prometheus push_gateway
   sudo cp push_gatway /usr/local/bin/
-  sudo chown -R prometheus:prometheus /usr/local/bin/push_gateway
-  sudo chmod -R 744 /usr/local/bin/push_gateway
+  # sudo chown -R prometheus:prometheus /usr/local/bin/push_gateway
+  # sudo chmod -R 744 /usr/local/bin/push_gateway
 
   # Create the service file
   {
@@ -584,6 +607,7 @@ install_push_gateway() {
   # so, the alternative is to configure top from the interactive screen, and save the configuration file using "W"
   # the config file, toprc, is normally found in /etc/.config/procps/toprc, but you can move it wherever you'd like
   # to get top to use the config file, place the file in any folder with the .config/procps/toprc structure below it
+  # take note that this step is performed during the Prometheus install, so it doesn't need to be handled again here - toprc should already be in place!
   # if you call top like this $ HOME="my_config_dir" top it will use the config file to format the output
   # given a proper config file, the command below will produce a compact set of top N processes with non-zero CPU and memory usage, and it runs very fast
   # mapfile procs < <(HOME="/etc/algorand-monitoring" top -bn1 | awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9;if(NF>9) s=s f substr($0,index($0,$10));else s=s f;print s;close(cmd);}}')
@@ -597,17 +621,166 @@ install_push_gateway() {
   # with the standard top output, the user ID would be missing and user names sometimes truncated
 
   # Collect process statistics where CPU or MEM is non-zero (normally a short list)
-  HOME=${home_dir} && IFS=$'\n'
-  mapfile procs < <(top -bn1 | \
-    awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9;if(NF>9) s=s f substr($0,index($0,$10));else s=s f;print s;close(c);}}')
+  # the stuff below needs to be turned into a process metrics exporter - it needs a service and timer file just like the algod metrics exporter too
+  # the exporter needs to be placed into /etc/prometheus/push_gateway
+#  home_dir="/etc/prometheus/top"
+#  HOME=${home_dir} && IFS=$'\n'
+#  mapfile procs < <(top -bn1 | \
+#    awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9f;if(NF>9) s=s substr($0,index($0,$10));print s;close(c);}}')
 
-  for i in ${procs[@]}; do
-    IFS='|' read -r proc_pid proc_uid proc_user proc_priority proc_status proc_cpu_pct proc_mem_pct proc_run_time proc_threads proc_bin proc_args \
-      <<< $(tr '[:upper:]' '[:lower:]' <<< ${i})
-    label="proc_pid=\"${proc_pid}\",proc_uid=\"${proc_uid}\",proc_user=\"${proc_user}\",proc_priority=\"${proc_priority}\",proc_status=\"${proc_status}\",proc_bin=\"${proc_bin}\",proc_args=\"${proc_args}\""
-    echo $proc_cpu_pct $proc_mem_pct $proc_run_time $proc_threads # works
-    echo $label # works
-  done
+#  for i in ${procs[@]}; do
+#    IFS='|' read -r proc_pid proc_uid proc_user proc_priority proc_status proc_cpu_pct proc_mem_pct proc_run_time proc_threads proc_bin proc_args \
+#      <<< $(tr '[:upper:]' '[:lower:]' <<< ${i})
+#    label="proc_pid=\"${proc_pid}\",proc_uid=\"${proc_uid}\",proc_user=\"${proc_user}\",proc_priority=\"${proc_priority}\",proc_status=\"${proc_status}\",proc_bin=\"${proc_bin}\",proc_args=\"${proc_args}\""
+#    echo $proc_cpu_pct $proc_mem_pct $proc_run_time $proc_threads # works
+#    echo $label # works
+#    # remember to adjust the CPU% values from top - they need to be divided by core count - refer to the algod exporter to see how to do it in one clean line
+#    # this is where we will take the opportunity to POST to the Push Gateway endpoint...
+#  done
+
+  # REF: https://stackoverflow.com/questions/307502/in-linux-what-do-all-the-values-in-the-top-command-mean
+  # REF: https://manpages.ubuntu.com/manpages/xenial/man1/top.1.html
+  # in case you were wondering what the "process status" is, it is also referred to as "process state", and here is the mapping:
+  # "R": "running", "S": "sleeping", "D": "disk sleep", "T": "stopped", "t": "tracing stop", "X": "dead", "Z": "zombie", "P": "parked", "I": "idle"
+  # maybe I should translate these for readability...
+
+  # Create the process metrics emitter
+  file_prefix="process_metrics"
+  metrics_emitter="${file_prefix}_emitter"
+  target_dir="/etc/prometheus/push_gateway"
+  sudo mkdir -pm744 ${target_dir}
+
+  # Create process metrics emitter service file
+  # REF: https://www.putorius.net/using-systemd-timers.html
+  {
+    echo "[Unit]"
+    echo "Description=\"Runs the process metrics emitter, publishing top service metrics to be consumed by the Prometheus Push Gateway\""
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo ""
+    echo "[Service]"
+    echo "SyslogIdentifier=${metrics_emitter}"	
+    echo "ExecStart=/bin/bash ${target_dir}/${metrics_emitter}.sh"
+  } > ${metrics_emitter}.service
+
+  # Create the process metrics emitter timer file
+  {
+    echo "[Unit]"
+    echo "Description=\"Timer to run the process metrics emitter\""
+    echo ""
+    echo "[Timer]"
+    echo "Unit=${metrics_emitter}.service"
+    echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=timers.target"
+  } > ${metrics_emitter}.timer
+
+  # Move the service and timer files to systemd
+  find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
+  
+  # Create process metrics emitter
+  {
+    echo '#!/bin/bash'
+    echo ""
+    echo "path=\$( cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd )"
+    echo "cd \${path}"
+#    echo "dataPath=\"\${path}/collector_textfile\""
+#    echo "fileName=\"${file_prefix}.prom\""
+#    echo "file=\"\${dataPath}/\${fileName}\""
+#    echo "tmpFile=\"\${file}.tmp\""
+#    echo "lastCollected=(\$(date +%s))"
+#    echo ""
+#    echo "mapfile -t goalStatus < <(sudo -u algorand goal node status)"
+#    echo ""
+#    echo "for i in \"\${goalStatus[@]}\""
+#    echo "do"
+#    echo "  IFS=: read -r label metric <<< \$((tr '[:upper:]' '[:lower:]') <<< \${i})"
+#    echo "  metric=\$(echo \${metric} | awk '{\$1=\$1};1' | sed 's/s\$//')"
+#    echo "  case \${label} in"
+#    echo "    \"last committed block\")"
+#    echo "      lastBlock=\${metric};;"
+#    echo "    \"time since last block\")"
+#    echo "      timeSinceLastBlock=\${metric};;"
+#    echo "    \"sync time\")"
+#    echo "      syncTime=\${metric};;"
+#    echo "    \"round for next consensus protocol\")"
+#    echo "      nextConsensusRound=\${metric};;"
+#    echo "  esac"
+#    echo "done"	
+#    echo ""
+#    echo "host=\$(hostname)"
+#    echo "label=\"host=\\\"\${host}\\\"\""
+#    echo ""
+#    echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
+    # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
+#    echo "algod_version=\$(sudo -u algorand algod -v | grep \"$(sudo -u algorand algod -c)\" | awk '{print \$1}')"
+#    echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
+    # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
+#    echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
+#    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"
+#    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -bn 1 -p \$(pidof algod) | tail -1 | awk '{print \$5,\$6}')"
+#    echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"
+#    echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
+    # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
+#    echo "algod_port=\$(cat \${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1)"
+#    echo "algod_genesis_id=\"\$(sudo -u algorand algod -G)\""
+#    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_port=\\\"\${algod_port}\\\", algod_genesis_id=\\\"\${algod_genesis_id}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
+#    echo ""
+#    echo "{"
+#    echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
+#    echo "  echo \"# TYPE algod_last_committed_block gauge\""
+#    echo "  echo \"algod_last_committed_block {\${label}} \${lastBlock}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_time_since_last_block_seconds Time since the most recent block of the Algorand blockchain was received in seconds.\""
+#    echo "  echo \"# TYPE algod_time_since_last_block_seconds gauge\""
+#    echo "  echo \"algod_time_since_last_block_seconds {\${label}} \${timeSinceLastBlock}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_sync_time_seconds Time required to synchronize the ledger to the current Algorand blockchain state in seconds.\""
+#    echo "  echo \"# TYPE algod_sync_time_seconds gauge\""
+#    echo "  echo \"algod_sync_time_seconds {\${label}} \${syncTime}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_next_consensus_round The next consensus round (block) for the Algorand blockchain.\""
+#    echo "  echo \"# TYPE algod_next_consensus_round gauge\""
+#    echo "  echo \"algod_next_consensus_round {\${label}} \${nextConsensusRound}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_pid The current algod service process ID.\""
+#    echo "  echo \"# TYPE algod_pid gauge\""
+#    echo "  echo \"algod_pid {\${label_meta}} \${algod_pid}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_is_active The current active state of the algod service.\""
+#    echo "  echo \"# TYPE algod_is_active gauge\""
+#    echo "  echo \"algod_is_active {\${label_meta}} \${algod_is_active}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_start_timestamp_seconds Timestamp when algod service was last started in seconds since epoch (1970).\""
+#    echo "  echo \"# TYPE algod_start_timestamp_seconds gauge\""
+#    echo "  echo \"algod_start_timestamp_seconds {\${label_meta}} \${algod_start_timestamp_seconds}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_uptime_seconds Time in seconds since the algod service was last started.\""
+#    echo "  echo \"# TYPE algod_uptime_seconds gauge\""
+#    echo "  echo \"algod_uptime_seconds {\${label_meta}} \${algod_uptime_seconds}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_cpu_pct Percent CPU usage for the algod service reported by ps command.\""
+#    echo "  echo \"# TYPE algod_cpu_pct gauge\""
+#    echo "  echo \"algod_cpu_pct {\${label_meta}} \${algod_cpu_pct_adj}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_mem_pct Percent memory usage for the algod service reported by ps command.\""
+#    echo "  echo \"# TYPE algod_mem_pct gauge\""
+#    echo "  echo \"algod_mem_pct {\${label_meta}} \${algod_mem_pct}\""
+#    echo "  echo \"\""
+#    echo "  echo \"# HELP algod_metrics_last_collected_timestamp_seconds Timestamp when algod metrics were last collected in seconds since epoch (1970).\""
+#    echo "  echo \"# TYPE algod_metrics_last_collected_timestamp_seconds gauge\""
+#    echo "  echo \"algod_metrics_last_collected_timestamp_seconds {\${label}} \${lastCollected}\""
+#    echo "  echo \"\""
+#    echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
+#    echo ""
+#    echo "mv -f \${tmpFile} \${file}"
+  } | sudo -u prometheus tee ${metrics_emitter}.sh > /dev/null
+
+  # Apply permissions and move script to target directory
+  sudo chmod 774 *.sh
+  sudo cp ${metrics_emitter}.sh ${target_dir}
+  sudo chown -R prometheus:prometheus ${target_dir}
 
   # Initialize the service
   echo "Initializing service"
@@ -615,16 +788,8 @@ install_push_gateway() {
   sudo systemctl daemon-reload
   sudo systemctl start push_gateway
   sudo systemctl enable push_gateway
-  cd ..
 
-  # Modify prometheus.yml to add the scrape target for push gateway
-  # scrape_configs:
-  # - job_name: pushgateway
-  #   honor_labels: true
-  #   static_configs:
-  #   - targets: ['localhost:9091']
-  #     labels:
-  #       pushgateway_instance: algod-??TKTK
+  cd ..
 
   # Print footer
   echo ""
@@ -690,7 +855,7 @@ install_grafana() {
 
   # Create the geojson file
   geojson_path="/usr/share/grafana/public/maps"
-  geojson_file="node.geojson"
+  geojson_file="node.geojson.tmp"
   host=$(hostname)
   location="Pleasantville, Maryland"
   longitude="-76.442887"
@@ -749,6 +914,12 @@ install_grafana() {
   echo ""
   echo "View the interface using this endpoint:"
   echo "  http://<your-host-ip>:3000"
+  echo ""
+  echo "Be sure to modify your geojson file to provide your correct node location and other information:"
+  echo "  - Find the file here: ${geojson_path}/${geojson_file}"
+  echo "  - First, update the content, then rename the file to remove the \".tmp\" extension"
+  echo "  - Grafana is very stubborn about the geojson static sources, it must cache the values - so try to get your longitude and latitude right the first time! ;-)"
+  echo "  - It might help to restart the service if you make a change \$ sudo systemctl restart grafana-server"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
   echo ""
