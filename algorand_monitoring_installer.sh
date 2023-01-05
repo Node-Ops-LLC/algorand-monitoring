@@ -131,10 +131,17 @@ install_prometheus() {
     echo "  - job_name: 'node-metrics'"
     echo "    metrics_path: '/metrics'"
     echo "    static_configs:"
-    echo "      - targets: ['localhost:9100'], ['localhost:9101']" # if either one of the targets fails, for example if telemetry is not enabled, then this will still work
+    echo "      - targets: ['localhost:9100'], ['localhost:9101'], ['localhost:9091']" # 2 node exporter, 1 push gateway - if telemetry is not enabled, then 9101 will still work
     echo "        labels:"
     echo "          alias: 'node'"
   } >> prometheus.yml
+
+  # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
+  relabel_configs:
+  - source_labels: [__address__]
+    regex: (.*):9100
+    replacement: $1
+    target_label: cshost
 
   # Move files to target directories and apply permissions
   sudo cp {prometheus,promtool} /usr/local/bin/
@@ -166,11 +173,21 @@ install_prometheus() {
     echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
     echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
     echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
-    echo "  --web.route-prefix=/"
+    echo "  --web.route-prefix=/ \\"
+    echo "  --enable-feature=expand-external-labels" # REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27
     echo ""
     echo "[Install]"
     echo "WantedBy=multi-user.target"
   } > prometheus.service
+
+  # Configure top command...
+  echo "Configuring top command for process metrics..."
+  home_dir="/etc/prometheus/top"
+  config_file_dir="${home_dir}/.config/procps"
+  mkdir -f ${config_file_dir}
+  cd ${config_file_dir}
+  # copy the top config file from GitHub to /etc/prometheus/top/.config/procps/toprc  
+  # wget from GitHub to config_file_dir...
 
   # Initialize the service
   echo "Initializing service"
@@ -396,15 +413,18 @@ install_algod_metrics_emitter() {
     echo ""
     echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
     # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
-    echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | awk '{print \$1}')"
+    echo "algod_version=\$(sudo -u algorand algod -v | grep \"$(sudo -u algorand algod -c)\" | awk '{print \$1}')"
     echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
     # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
     echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -b -n 1 -p \$(pidof algod) | tail -1 | awk '{print \$9,\$10}')"
-    echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"    
+    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"
+    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -bn 1 -p \$(pidof algod) | tail -1 | awk '{print \$5,\$6}')"
+    echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"
     echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
     # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
-    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
+    echo "algod_port=\$(cat \${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1)"
+    echo "algod_genesis_id=\"\$(sudo -u algorand algod -G)\""
+    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_port=\\\"\${algod_port}\\\", algod_genesis_id=\\\"\${algod_genesis_id}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
     echo ""
     echo "{"
     echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
@@ -529,6 +549,7 @@ install_push_gateway() {
   sudo mkdir -pm744 push_gateway
   tar -xvf pushGateway.tar.gz -C push_gateway --strip-components=1
   cd push_gateway
+  working_dir=$(pwd)
 
   # TKTK  # Move files to target directories and apply permissions
   sudo cp push_gatway /usr/local/bin/
@@ -557,6 +578,36 @@ install_push_gateway() {
     echo "[Install]"
     echo "WantedBy=multi-user.target"
   } > push_gateway.service
+
+  # PROCESS EXPORTER
+  # you can get this info from the standard top output, but you'd have to trim off the stats and the usernames get truncated
+  # so, the alternative is to configure top from the interactive screen, and save the configuration file using "W"
+  # the config file, toprc, is normally found in /etc/.config/procps/toprc, but you can move it wherever you'd like
+  # to get top to use the config file, place the file in any folder with the .config/procps/toprc structure below it
+  # if you call top like this $ HOME="my_config_dir" top it will use the config file to format the output
+  # given a proper config file, the command below will produce a compact set of top N processes with non-zero CPU and memory usage, and it runs very fast
+  # mapfile procs < <(HOME="/etc/algorand-monitoring" top -bn1 | awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9;if(NF>9) s=s f substr($0,index($0,$10));else s=s f;print s;close(cmd);}}')
+  # sample output row: 3747033|114|algorand|rt|S|6.2|14.4|1344:20|29|/usr/bin/algod|-d /var/lib/algorand
+  # vars:proc_pid|proc_uid|proc_user|proc_priority|proc_status|proc_cpu_pct|proc_mem_pct|proc_run_time|proc_threads|proc_bin|proc_args
+  # label should include pid, uid, user, priority, status, bin, args - these will be relatively lower cardinality
+  # metrics should include cpu_pct, mem_pct, run_time, threads - these will be numeric and higher cardinality
+  # series will need to be joined on pid, uid, bin - for example to connect cpu_pct to mem_pct
+  # there may be a way to test for the standard top output too, but that would just be too complicated, so instead, let's just use a pre-defined toprc!
+  # the command above solves the issue of partial usernames from top by looking them up by UID via awk
+  # with the standard top output, the user ID would be missing and user names sometimes truncated
+
+  # Collect process statistics where CPU or MEM is non-zero (normally a short list)
+  HOME=${home_dir} && IFS=$'\n'
+  mapfile procs < <(top -bn1 | \
+    awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9;if(NF>9) s=s f substr($0,index($0,$10));else s=s f;print s;close(c);}}')
+
+  for i in ${procs[@]}; do
+    IFS='|' read -r proc_pid proc_uid proc_user proc_priority proc_status proc_cpu_pct proc_mem_pct proc_run_time proc_threads proc_bin proc_args \
+      <<< $(tr '[:upper:]' '[:lower:]' <<< ${i})
+    label="proc_pid=\"${proc_pid}\",proc_uid=\"${proc_uid}\",proc_user=\"${proc_user}\",proc_priority=\"${proc_priority}\",proc_status=\"${proc_status}\",proc_bin=\"${proc_bin}\",proc_args=\"${proc_args}\""
+    echo $proc_cpu_pct $proc_mem_pct $proc_run_time $proc_threads # works
+    echo $label # works
+  done
 
   # Initialize the service
   echo "Initializing service"
@@ -641,11 +692,11 @@ install_grafana() {
   geojson_path="/usr/share/grafana/public/maps"
   geojson_file="node.geojson"
   host=$(hostname)
-  location="Forest Hill, Maryland"
-  longitude="-76.387672"
-  latitude="39.585030"
+  location="Pleasantville, Maryland"
+  longitude="-76.442887"
+  latitude="39.542517"
   ip_address="0.0.0.0"
-  provider="My_Hosting_Provider"
+  provider="Verizon"
 
   {
     echo "{"
