@@ -603,7 +603,7 @@ install_push_gateway() {
     echo "WantedBy=multi-user.target"
   } > push_gateway.service
 
-  # PROCESS EXPORTER
+  # PROCESS METRICS EMITTER
   # you can get this info from the standard top output, but you'd have to trim off the stats and the usernames get truncated
   # so, the alternative is to configure top from the interactive screen, and save the configuration file using "W"
   # the config file, toprc, is normally found in /etc/.config/procps/toprc, but you can move it wherever you'd like
@@ -624,6 +624,8 @@ install_push_gateway() {
   # Collect process statistics where CPU or MEM is non-zero (normally a short list)
   # the stuff below needs to be turned into a process metrics exporter - it needs a service and timer file just like the algod metrics exporter too
   # the exporter needs to be placed into /etc/prometheus/push_gateway
+  # REF: https://linuxhint.com/print-columns-awk/ # extremely helpful reference gave me substr-index trick
+  # REF: http://awk.freeshell.org/AllAboutGetline # I lost my original reference that gave the awk cmd | getline var trick, but this explains it
 #  home_dir="/etc/prometheus/top"
 #  HOME=${home_dir} && IFS=$'\n'
 #  mapfile procs < <(top -bn1 | \
@@ -919,7 +921,7 @@ install_grafana() {
   echo "Be sure to modify your geojson file to provide your correct node location and other information:"
   echo "  - Find the file here: ${geojson_path}/${geojson_file}"
   echo "  - First, update the content, then rename the file to remove the \".tmp\" extension"
-  echo "  - Grafana is very stubborn about the geojson static sources, it must cache the values - so try to get your longitude and latitude right the first time! ;-)"
+  echo "  - Grafana is very stubborn about the geojson source - so try to get your longitude and latitude right! ;-)"
   echo "  - It might help to restart the service if you make a change \$ sudo systemctl restart grafana-server"
   echo ""
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
