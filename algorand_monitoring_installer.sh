@@ -193,6 +193,7 @@ install_prometheus() {
   } > prometheus.service
 
   # Configure top command...
+  # REF: https://superuser.com/questions/1052688/how-to-choose-columns-for-top-command-in-batch-mode
   echo "Configuring top command for process metrics..."
   home_dir="/etc/prometheus/top"
   config_file_dir="${home_dir}/.config/procps"
@@ -405,6 +406,7 @@ install_algod_metrics_emitter() {
     echo "file=\"\${dataPath}/\${fileName}\""
     echo "tmpFile=\"\${file}.tmp\""
     echo "lastCollected=(\$(date +%s))"
+    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"    
     echo ""
     echo "mapfile -t goalStatus < <(sudo -u algorand goal node status)"
     echo ""
@@ -433,7 +435,6 @@ install_algod_metrics_emitter() {
     echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
     # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
     echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"
     echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -bn 1 -p \$(pidof algod) | tail -1 | awk '{print \$5,\$6}')"
     echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"
     echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
