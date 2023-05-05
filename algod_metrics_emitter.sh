@@ -7,7 +7,7 @@
 #     - Also calls "algod" or obtains other information from systemd or the data directory for the service
 #     - Creates properly formatted .prom files for the textfile collector
 #     - Saves the text files to the target directory
-#     - Requires function "get_metric_emitter_source", and then may 
+#     - Requires function "get_metric_emitter_source", and then may  
 #
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 

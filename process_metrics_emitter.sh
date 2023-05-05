@@ -7,7 +7,7 @@
 #     - "emits" process metrics as properly-formatted .prom files in the textfile collector directory to be scraped by Prometheus
 #     - employs commonly-available programs and shell commands to generate properly formatted .prom files with process metrics
 #     - Process Exporter is available but not maintained by the project, so this is an independent and simple implementation
-#     - can be used as a source file for process-specific implementations, or when called by default will collect "top" process metrics
+#     - can be used as a source file for process-specific implementations, or when called by default will collect "top" process metrics 
 #
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
