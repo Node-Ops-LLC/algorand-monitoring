@@ -39,37 +39,36 @@ do
   metric=$(echo ${metric} | awk '{$1=$1};1' | sed 's/s$//')
   case ${label} in
     "last committed block")
-      lastBlock=${metric};;
+      algod_last_committed_block=${metric};;
     "time since last block")
-      timeSinceLastBlock=${metric};;
+      algod_time_since_last_block_seconds=${metric};;
     "sync time")
-      syncTime=${metric};;
+      algod_sync_time_seconds=${metric};;
     "round for next consensus protocol")
-      nextConsensusRound=${metric};;
+      algod_next_consensus_round=${metric};;
   esac
 done
 
 # df --output=fstype,used,avail /var/lib/algorand | awk 'FNR==2{print $1,$2,$3}' -- to get disk use for the data directory
 
-algod_is_active=$(systemctl is-active --quiet algorand && echo 1 || echo 0)
-algod_version=$(sudo -u algorand algod -v | grep "stable" | awk '{print $1}')
-currentDtmz=$(date -u +%s) # get the current datetime in epoch seconds
+algod_is_active=$(systemctl is-active --quiet algorand && echo 1 || echo 0); ((${debug})) && echo "metric: algod_is_active: " ${algod_is_active}
+algod_version=$(sudo -u algorand algod -v | grep "stable" | awk '{print $1}'); ((${debug})) && echo "metric: algod_version: " ${algod_version}
 
-algod_start_timestamp_seconds=$((${currentDtmz}-${algod_uptime_seconds}))
-algod_port=$(cat ${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1)
-algod_genesis_id="$(sudo -u algorand algod -G)"
-label_meta="${label}, algod_version=\"${algod_version}\", algod_port=\"${algod_port}\", algod_genesis_id=\"${algod_genesis_id}\", algod_instance=\"${algod_instance}\", algod_instance_data_dir=\"${algod_instance_data_dir}\", algod_pid=\"${algod_pid}\""
+algod_start_timestamp_seconds=$((${metric_dtmu}-${algod_uptime_seconds})); ((${debug})) && echo "metric: algod_start_timestamp_seconds: " ${algod_start_timestamp_seconds}
+algod_port=$(cat ${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1); ((${debug})) && echo "metric: algod_port: " ${algod_port}
+algod_genesis_id="$(sudo -u algorand algod -G)"; ((${debug})) && echo "metric: algod_genesis_id: " ${algod_genesis_id}
+label_meta="${label}, algod_version=\"${algod_version}\", algod_port=\"${algod_port}\", algod_genesis_id=\"${algod_genesis_id}\", algod_instance=\"${algod_instance}\", algod_instance_data_dir=\"${algod_instance_data_dir}\", algod_pid=\"${algod_pid}\""; ((${debug})) && echo "label: label_meta: " ${label_meta}
 
-emit_counter "algod_last_committed_block" "${lastBlock}" "${label}" "The most recent block of the Algorand blockchain that was received and committed to the ledger."
-emit_counter "algod_next_consensus_round" "${nextConsensusRound}" "${label}" "The next consensus round (block) for the Algorand blockchain."
-emit_gauge "algod_time_since_last_block_seconds" "${timeSinceLastBlock}" "${label}" "Time since the most recent block of the Algorand blockchain was received in seconds."
-emit_gauge "algod_sync_time_seconds" "${syncTime}" "${label}" "Time required to synchronize the ledger to the current Algorand blockchain state in seconds."
+emit_counter "algod_last_committed_block" "${algod_last_committed_block}" "${label}" "The most recent block of the Algorand blockchain that was received and committed to the ledger."
+emit_counter "algod_next_consensus_round" "${algod_next_consensus_round}" "${label}" "The next consensus round (block) for the Algorand blockchain."
+emit_gauge "algod_time_since_last_block_seconds" "${algod_time_since_last_block_seconds}" "${label}" "Time since the most recent block of the Algorand blockchain was received in seconds."
+emit_gauge "algod_sync_time_seconds" "${algod_sync_time_seconds}" "${label}" "Time required to synchronize the ledger to the current Algorand blockchain state in seconds."
 emit_gauge "algod_pid" "${algod_pid}" "${label_meta}" "The current algod service process ID."
 emit_gauge "algod_is_active" "${algod_is_active}" "${label_meta}" "The current active state of the algod service."
 emit_counter "algod_start_timestamp_seconds" "${algod_start_timestamp_seconds}" "${label_meta}" "Timestamp when algod service was last started in seconds since epoch (1970)."
 emit_gauge "algod_uptime_seconds" "${algod_uptime_seconds}" "${label_meta}" "Time in seconds since the algod service was last started."
 emit_gauge "algod_cpu_pct" "${algod_cpu_pct_adj}" "${label_meta}" "Percent CPU usage for the algod service reported by ps command."
 emit_gauge "algod_mem_pct" "${algod_mem_pct}" "${label_meta}" "Percent memory usage for the algod service reported by ps command."
-emit_counter "algod_metrics_last_collected_timestamp_seconds" "${lastCollected}" "${label}" "Timestamp when algod metrics were last collected in seconds since epoch (1970)."
+emit_counter "algod_metrics_last_collected_timestamp_seconds" "${metric_dtmu}" "${label}" "Timestamp when algod metrics were last collected in seconds since epoch (1970)."
 
 finalize_metric_file

@@ -109,7 +109,7 @@ function emit_counter { # metric_key, metric_value, metric_label, metric_help
 metric_file=$(get_metric_file ${metric_dir} ${script_prefix}); ((${debug})) && echo "Metric file:" ${metric_file}
 metric_tmp_file=$(get_tmp_file ${metric_file}); ((${debug})) && echo "Metric tmp file:" ${metric_tmp_file}
 metric_label=$(append_metric_label "host" "${host}"); ((${debug})) && echo "Metric label:" ${metric_label}
-metric_dtm=$(get_dtm_epoch_ms); ((${debug})) && echo "Metric datetime (unix ms):" ${metric_dtm}
+metric_dtmu=$(get_dtm_epoch_ms); ((${debug})) && echo "Metric datetime (unix ms):" ${metric_dtmu}
 
 # Manage Temp File
 touch ${metric_tmp_file};
