@@ -2,10 +2,26 @@
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 #
-# Installs monitoring tools for Algorand node runners: Prometheus, Node Exporter, Algod Metrics Emitter, Grafana, and dashboard
-# Tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
-# REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
-# REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
+# Installs monitoring tools for Algorand node runners:
+#  - Prometheus: a time-series database to store your metrics locally
+#  - Node Exporter: a set of collectors that gather information from your host computer - exposes a scrape target for Prometheus
+#  - Algod Metrics Emitter: a script that emits metrics about the Algorand service to Node Exporter via the textfile collector
+#  - Push Gateway: a REST gateway that accepts and caches metrics from intermittent processes - exposes a scrape target
+#  - Process Metrics Exporter: a script that emits basic but important "top" host process metrics to push gateway
+#  - Grafana: an open-source graphing and visualization tool that can organize, group and display information beautifully
+#  - Algorand dashboard: a purpose-built node monitoring dashboard derived from Node Exporter Full dashboard #1860
+#     REF: https://grafana.com/grafana/dashboards/1860-node-exporter-full/
+#
+# This install has been tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
+#
+# A few references that helped kickstart the process of building this toolset:
+#   REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
+#   REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
+#   REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
+#   REF: https://medium.com/swlh/intro-to-server-monitoring-b782fc82911e
+#
+# Many other references are embedded in comments below to help document the sources for various ideas and tricks...
+#
 # Support: https://discord.gg/algorand # node runners
 #
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
@@ -133,27 +149,17 @@ install_prometheus() {
     echo "    metrics_path: \"/metrics\""
     echo "    honor_labels: true"
     echo "    static_configs:"
-    echo "      - targets: [\"localhost:9100\", \"localhost:9101\", \"localhost:9091\"]" # 2 node exporter, 1 push gateway
+    echo "      - targets: [\"localhost:9100\", \"localhost:9101\"]"  # , \"localhost:9091\"]" # 2 node exporter, 1 push gateway
     echo "        labels:"
-    echo "          host: \"$(hostname)\"" # just brute-force it, it's pretty rare someone changes the hostname in any case...
-    # REF: https://stackoverflow.com/questions/43602153/prometheus-how-to-change-instance-name # after some investigation, this is the way... (see the simple method above)
-    # REF: https://stackoverflow.com/questions/49896956/relabel-instance-to-hostname-in-prometheus
-    # REF: https://blog.ruanbekker.com/blog/2022/05/30/prometheus-relabel-config-examples/
-    # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
-    # the config below does allow the service to start, and creates the "host2" label - but it's only getting the text "localhost", so... wah wah wahhhhh
-    # relabel_configs:
-    # - source_labels: [__address__]
-    #   regex: (.*):9101
-    #   replacement: $1" # this did work... probably need to make the targets use the hostname, that's the only way...
-    #   target_label: "host2"
+    echo "          host: \"$(hostname)\""
   } >> prometheus.yml
 
   # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
-  relabel_configs:
-  - source_labels: [__address__]
-    regex: (.*):9100
-    replacement: $1
-    target_label: cshost
+  #relabel_configs:
+  #- source_labels: [__address__]
+  #  regex: (.*):9100
+  #  replacement: $1
+  #  target_label: cshost
 
   # Move files to target directories and apply permissions
   sudo cp {prometheus,promtool} /usr/local/bin/
@@ -308,7 +314,7 @@ install_node_exporter() {
     echo "  --collector.powersupplyclass \\"
     echo "  --collector.processes \\"
     echo "  --collector.systemd \\"
-    echo "  --collector.thermal \\"
+    # echo "  --collector.thermal \\"
     echo "  --collector.time \\"
     echo "  --collector.uname \\"
     echo "  --collector.vmstat \\"
@@ -345,20 +351,20 @@ install_node_exporter() {
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
-# Installs Algod Metrics Emitter
-install_algod_metrics_emitter() {
+# Installs Metrics Emitters
+install_metrics_emitters() {
 
   # Print header
   echo;
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Installing Algod Metrics Emitter";
+  echo "Installing Metrics Emitters";
   echo;
 
   # Confirm directory exists
   target_dir="/etc/prometheus/node_exporter"
   sudo mkdir -pm744 ${target_dir}/collector_textfile
   sudo chown -R prometheus:prometheus ${target_dir}
-  cd node_exporter # this should already exist, could check and do all that razamatazz but nah...
+  cd node_exporter # this should already exist
 
   # Create the algod metrics emitter
   file_prefix="algod_metrics"
@@ -394,214 +400,14 @@ install_algod_metrics_emitter() {
 
   # Move the service and timer files to systemd
   find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
-  
-  # Create algod metrics emitter
-  {
-    echo '#!/bin/bash'
-    echo ""
-    echo "path=\$( cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd )"
-    echo "cd \${path}"
-    echo "dataPath=\"\${path}/collector_textfile\""
-    echo "fileName=\"${file_prefix}.prom\""
-    echo "file=\"\${dataPath}/\${fileName}\""
-    echo "tmpFile=\"\${file}.tmp\""
-    echo "lastCollected=(\$(date +%s))"
-    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"    
-    echo ""
-    echo "mapfile -t goalStatus < <(sudo -u algorand goal node status)"
-    echo ""
-    echo "for i in \"\${goalStatus[@]}\""
-    echo "do"
-    echo "  IFS=: read -r label metric <<< \$((tr '[:upper:]' '[:lower:]') <<< \${i})"
-    echo "  metric=\$(echo \${metric} | awk '{\$1=\$1};1' | sed 's/s\$//')"
-    echo "  case \${label} in"
-    echo "    \"last committed block\")"
-    echo "      lastBlock=\${metric};;"
-    echo "    \"time since last block\")"
-    echo "      timeSinceLastBlock=\${metric};;"
-    echo "    \"sync time\")"
-    echo "      syncTime=\${metric};;"
-    echo "    \"round for next consensus protocol\")"
-    echo "      nextConsensusRound=\${metric};;"
-    echo "  esac"
-    echo "done"	
-    echo ""
-    echo "host=\$(hostname)"
-    echo "label=\"host=\\\"\${host}\\\"\""
-    echo ""
-    echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
-    # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
-    echo "algod_version=\$(sudo -u algorand algod -v | grep \"$(sudo -u algorand algod -c)\" | awk '{print \$1}')"
-    echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
-    # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
-    echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -bn 1 -p \$(pidof algod) | tail -1 | awk '{print \$5,\$6}')"
-    echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"
-    echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
-    # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
-    echo "algod_port=\$(cat \${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1)"
-    echo "algod_genesis_id=\"\$(sudo -u algorand algod -G)\""
-    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_port=\\\"\${algod_port}\\\", algod_genesis_id=\\\"\${algod_genesis_id}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
-    echo ""
-    echo "{"
-    echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
-    echo "  echo \"# TYPE algod_last_committed_block gauge\""
-    echo "  echo \"algod_last_committed_block {\${label}} \${lastBlock}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_time_since_last_block_seconds Time since the most recent block of the Algorand blockchain was received in seconds.\""
-    echo "  echo \"# TYPE algod_time_since_last_block_seconds gauge\""
-    echo "  echo \"algod_time_since_last_block_seconds {\${label}} \${timeSinceLastBlock}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_sync_time_seconds Time required to synchronize the ledger to the current Algorand blockchain state in seconds.\""
-    echo "  echo \"# TYPE algod_sync_time_seconds gauge\""
-    echo "  echo \"algod_sync_time_seconds {\${label}} \${syncTime}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_next_consensus_round The next consensus round (block) for the Algorand blockchain.\""
-    echo "  echo \"# TYPE algod_next_consensus_round gauge\""
-    echo "  echo \"algod_next_consensus_round {\${label}} \${nextConsensusRound}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_pid The current algod service process ID.\""
-    echo "  echo \"# TYPE algod_pid gauge\""
-    echo "  echo \"algod_pid {\${label_meta}} \${algod_pid}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_is_active The current active state of the algod service.\""
-    echo "  echo \"# TYPE algod_is_active gauge\""
-    echo "  echo \"algod_is_active {\${label_meta}} \${algod_is_active}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_start_timestamp_seconds Timestamp when algod service was last started in seconds since epoch (1970).\""
-    echo "  echo \"# TYPE algod_start_timestamp_seconds gauge\""
-    echo "  echo \"algod_start_timestamp_seconds {\${label_meta}} \${algod_start_timestamp_seconds}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_uptime_seconds Time in seconds since the algod service was last started.\""
-    echo "  echo \"# TYPE algod_uptime_seconds gauge\""
-    echo "  echo \"algod_uptime_seconds {\${label_meta}} \${algod_uptime_seconds}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_cpu_pct Percent CPU usage for the algod service reported by ps command.\""
-    echo "  echo \"# TYPE algod_cpu_pct gauge\""
-    echo "  echo \"algod_cpu_pct {\${label_meta}} \${algod_cpu_pct_adj}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_mem_pct Percent memory usage for the algod service reported by ps command.\""
-    echo "  echo \"# TYPE algod_mem_pct gauge\""
-    echo "  echo \"algod_mem_pct {\${label_meta}} \${algod_mem_pct}\""
-    echo "  echo \"\""
-    echo "  echo \"# HELP algod_metrics_last_collected_timestamp_seconds Timestamp when algod metrics were last collected in seconds since epoch (1970).\""
-    echo "  echo \"# TYPE algod_metrics_last_collected_timestamp_seconds gauge\""
-    echo "  echo \"algod_metrics_last_collected_timestamp_seconds {\${label}} \${lastCollected}\""
-    echo "  echo \"\""
-    echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
-    echo ""
-    echo "mv -f \${tmpFile} \${file}"
-  } | sudo -u prometheus tee ${metrics_emitter}.sh > /dev/null
+
+  # Download the shell script from GitHub instead of trying to print it out from here, it's getting too complicated.
+  wget -TKTK HTTPTKTK  
 
   # Apply permissions and move script to target directory
   sudo chmod 774 *.sh
   sudo chown prometheus:prometheus *.sh
   sudo cp ${metrics_emitter}.sh ${target_dir}
-
-  # Initialize the service
-  echo "Initializing custom metrics emitter"
-  sudo systemctl daemon-reload
-  sudo systemctl start ${metrics_emitter}.timer
-  sudo systemctl enable ${metrics_emitter}.timer
-
-  cd ..
-
-  # Print footer
-  echo ""
-  echo "Algod Metrics Emitter for Node Exporter is installed!"
-  echo ""
-  echo "Verify the service is running with the following command (q to exit):"
-  echo "  \$ sudo systemctl status algod_metrics_emitter"
-  echo ""
-  echo "View algod metrics using this endpoint:"
-  echo "  http://<your-host-ip>:9101/metrics"
-  echo ""
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
-  echo ""
-
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
-
-# Installs Push Gateway
-install_push_gateway() {
-
-  # REF: https://github.com/prometheus/pushgateway
-  # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusPushgatewayDropMetrics
-  # REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
-  # REF: https://prometheus.io/docs/practices/pushing/
-  # REF: https://www.metricfire.com/blog/prometheus-pushgateways-everything-you-need-to-know/
-  # You can skip this install, it's not being used for now.
-
-  # Example: https://github.com/prometheus/pushgateway
-  # This is one reason why the Push Gateway is so nice - it is very simple to push metrics to the endpoint...
-  # It also allows cached metrics to be deleted, and has other API functions - see the documentation
-  #
-  # cat << EOF | curl -X PUT --data-binary @- http://localhost:9091/metrics/job/algod-metrics/alias/algod
-  # TYPE algod_metric_example1 gauge
-  # algod_metric_example1{label="val1"} 42
-  # TYPE algod_metric_example2 gauge
-  # HELP algod_metric_example2 Just an example.
-  # algod_metric_example1 2398.283
-  # EOF
-  #
-
-  # Print header
-  echo "";
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Installing Push Gateway";
-  echo "";
-
-  # Check if Push Gateway is already installed
-  # if command -v  TKTK &> /dev/null; then
-  #   echo "TKTK is already installed: $(command -v TKTK)"
-	# (exit 1)
-  # fi
-
-  # Get the latest release
-  pushGatewaytFileName="$(curl -s https://api.github.com/repos/prometheus/pushgateway/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
-  if [[ $(wget -S --spider "${pushGatewayFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-    echo "Push Gateway install archive found: $pushGatewayFileName"
-  else
-    echo "Unable to find Push Gateway install archive"
-    (exit 1)
-  fi
-
-  # Download and extract the latest release
-  echo "Downloading: ${pushGatewayFileName}"
-  wget -nv --show-progress -O push_gateway.tar.gz "${pushGatewayFileName}"
-  sudo mkdir -pm744 push_gateway
-  tar -xvf pushGateway.tar.gz -C push_gateway --strip-components=1
-  cd push_gateway
-  working_dir=$(pwd)
-
-  # TKTK  # Move files to target directories and apply permissions
-  sudo chmod -R 744 push_gateway
-  sudo chown -R prometheus:prometheus push_gateway
-  sudo cp push_gatway /usr/local/bin/
-  # sudo chown -R prometheus:prometheus /usr/local/bin/push_gateway
-  # sudo chmod -R 744 /usr/local/bin/push_gateway
-
-  # Create the service file
-  {
-    echo "[Unit]"
-    echo "Description=Push Gateway"
-    echo "Documentation=https://github.com/prometheus/pushgateway"
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo ""
-    echo "[Service]"
-    echo "Type=simple"
-    echo "Restart=always"
-    echo "User=prometheus"
-    echo "Group=prometheus"
-    echo "SyslogIdentifier=push_gateway"
-    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
-    echo "ExecStart=/usr/local/bin/push_gateway \\"
-    echo "  --web.listen-address=0.0.0.0:9091 \\" # API endpoint
-    echo "  --web.persistence.file=/etc/prometheus/push_gateway/cache"
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=multi-user.target"
-  } > push_gateway.service
 
   # PROCESS METRICS EMITTER
   # you can get this info from the standard top output, but you'd have to trim off the stats and the usernames get truncated
@@ -784,6 +590,114 @@ install_push_gateway() {
   sudo chmod 774 *.sh
   sudo cp ${metrics_emitter}.sh ${target_dir}
   sudo chown -R prometheus:prometheus ${target_dir}
+
+  # Initialize the service
+  echo "Initializing custom metrics emitter"
+  sudo systemctl daemon-reload
+  sudo systemctl start ${metrics_emitter}.timer
+  sudo systemctl enable ${metrics_emitter}.timer
+
+  cd ..
+
+  # Print footer
+  echo ""
+  echo "Algod Metrics Emitter for Node Exporter is installed!"
+  echo ""
+  echo "Verify the service is running with the following command (q to exit):"
+  echo "  \$ sudo systemctl status algod_metrics_emitter"
+  echo ""
+  echo "View algod metrics using this endpoint:"
+  echo "  http://<your-host-ip>:9101/metrics"
+  echo ""
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
+  echo ""
+
+#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+
+# Installs Push Gateway
+install_push_gateway() {
+
+  # REF: https://github.com/prometheus/pushgateway
+  # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusPushgatewayDropMetrics
+  # REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
+  # REF: https://prometheus.io/docs/practices/pushing/
+  # REF: https://www.metricfire.com/blog/prometheus-pushgateways-everything-you-need-to-know/
+  # You can skip this install, it's not being used for now.
+
+  # Example: https://github.com/prometheus/pushgateway
+  # This is one reason why the Push Gateway is so nice - it is very simple to push metrics to the endpoint...
+  # It also allows cached metrics to be deleted, and has other API functions - see the documentation
+  # Metrics push to the gateway are never removed - the gateway should be used for oneshot or batch
+  # programs that have metrics of their final results, and need to save that data - the information
+  # sent to push gateway should always be true - for ephemeral data, use the textfile collector instead
+  #
+  # cat << EOF | curl -X PUT --data-binary @- http://localhost:9091/metrics/job/algod-metrics/alias/algod
+  # TYPE algod_metric_example1 gauge
+  # algod_metric_example1{label="val1"} 42
+  # TYPE algod_metric_example2 gauge
+  # HELP algod_metric_example2 Just an example.
+  # algod_metric_example1 2398.283
+  # EOF
+  #
+
+  # Print header
+  echo "";
+  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
+  echo "Installing Push Gateway";
+  echo "";
+
+  # Check if Push Gateway is already installed
+  # if command -v  TKTK &> /dev/null; then
+  #   echo "TKTK is already installed: $(command -v TKTK)"
+	# (exit 1)
+  # fi
+
+  # Get the latest release
+  pushGatewaytFileName="$(curl -s https://api.github.com/repos/prometheus/pushgateway/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
+  if [[ $(wget -S --spider "${pushGatewayFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+    echo "Push Gateway install archive found: $pushGatewayFileName"
+  else
+    echo "Unable to find Push Gateway install archive"
+    (exit 1)
+  fi
+
+  # Download and extract the latest release
+  echo "Downloading: ${pushGatewayFileName}"
+  wget -nv --show-progress -O push_gateway.tar.gz "${pushGatewayFileName}"
+  sudo mkdir -pm744 push_gateway
+  tar -xvf pushGateway.tar.gz -C push_gateway --strip-components=1
+  cd push_gateway
+  working_dir=$(pwd)
+
+  # TKTK  # Move files to target directories and apply permissions
+  sudo chmod -R 744 push_gateway
+  sudo chown -R prometheus:prometheus push_gateway
+  sudo cp push_gatway /usr/local/bin/
+  # sudo chown -R prometheus:prometheus /usr/local/bin/push_gateway
+  # sudo chmod -R 744 /usr/local/bin/push_gateway
+
+  # Create the service file
+  {
+    echo "[Unit]"
+    echo "Description=Push Gateway"
+    echo "Documentation=https://github.com/prometheus/pushgateway"
+    echo "Wants=network-online.target"
+    echo "After=network-online.target"
+    echo ""
+    echo "[Service]"
+    echo "Type=simple"
+    echo "Restart=always"
+    echo "User=prometheus"
+    echo "Group=prometheus"
+    echo "SyslogIdentifier=push_gateway"
+    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
+    echo "ExecStart=/usr/local/bin/push_gateway \\"
+    echo "  --web.listen-address=0.0.0.0:9091 \\" # API endpoint
+    echo "  --web.persistence.file=/etc/prometheus/push_gateway/cache"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+  } > push_gateway.service
 
   # Initialize the service
   echo "Initializing service"
@@ -1030,7 +944,7 @@ else
       (exit 1);;
   esac
 fi
-
+               
 (exit 0)
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
