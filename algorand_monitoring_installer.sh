@@ -352,12 +352,12 @@ install_node_exporter() {
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
 # Installs Metrics Emitters
-install_metrics_emitters() {
+install_algod_metrics_emitter() {
 
   # Print header
   echo;
   echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Installing Metrics Emitters";
+  echo "Installing Algod Metrics Emitter";
   echo;
 
   # Confirm directory exists
@@ -402,194 +402,53 @@ install_metrics_emitters() {
   find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
 
   # Download the shell script from GitHub instead of trying to print it out from here, it's getting too complicated.
-  wget -TKTK HTTPTKTK  
+  wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/process_metrics_emitter.sh
+  wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/algod_metrics_emitter.sh
 
   # Apply permissions and move script to target directory
   sudo chmod 774 *.sh
   sudo chown prometheus:prometheus *.sh
-  sudo cp ${metrics_emitter}.sh ${target_dir}
-
-  # PROCESS METRICS EMITTER
-  # you can get this info from the standard top output, but you'd have to trim off the stats and the usernames get truncated
-  # so, the alternative is to configure top from the interactive screen, and save the configuration file using "W"
-  # the config file, toprc, is normally found in /etc/.config/procps/toprc, but you can move it wherever you'd like
-  # to get top to use the config file, place the file in any folder with the .config/procps/toprc structure below it
-  # take note that this step is performed during the Prometheus install, so it doesn't need to be handled again here - toprc should already be in place!
-  # if you call top like this $ HOME="my_config_dir" top it will use the config file to format the output
-  # given a proper config file, the command below will produce a compact set of top N processes with non-zero CPU and memory usage, and it runs very fast
-  # mapfile procs < <(HOME="/etc/algorand-monitoring" top -bn1 | awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9;if(NF>9) s=s f substr($0,index($0,$10));else s=s f;print s;close(cmd);}}')
-  # sample output row: 3747033|114|algorand|rt|S|6.2|14.4|1344:20|29|/usr/bin/algod|-d /var/lib/algorand
-  # vars:proc_pid|proc_uid|proc_user|proc_priority|proc_status|proc_cpu_pct|proc_mem_pct|proc_run_time|proc_threads|proc_bin|proc_args
-  # label should include pid, uid, user, priority, status, bin, args - these will be relatively lower cardinality
-  # metrics should include cpu_pct, mem_pct, run_time, threads - these will be numeric and higher cardinality
-  # series will need to be joined on pid, uid, bin - for example to connect cpu_pct to mem_pct
-  # there may be a way to test for the standard top output too, but that would just be too complicated, so instead, let's just use a pre-defined toprc!
-  # the command above solves the issue of partial usernames from top by looking them up by UID via awk
-  # with the standard top output, the user ID would be missing and user names sometimes truncated
-
-  # Collect process statistics where CPU or MEM is non-zero (normally a short list)
-  # the stuff below needs to be turned into a process metrics exporter - it needs a service and timer file just like the algod metrics exporter too
-  # the exporter needs to be placed into /etc/prometheus/push_gateway
-  # REF: https://linuxhint.com/print-columns-awk/ # extremely helpful reference gave me substr-index trick
-  # REF: http://awk.freeshell.org/AllAboutGetline # I lost my original reference that gave the awk cmd | getline var trick, but this explains it
-#  home_dir="/etc/prometheus/top"
-#  HOME=${home_dir} && IFS=$'\n'
-#  mapfile procs < <(top -bn1 | \
-#    awk '{f="|";c="id -un "$2;if($5>0||$6>0){c|getline u;s=$1f$2f u f$3f$4f$5f$6f$7f$8f$9f;if(NF>9) s=s substr($0,index($0,$10));print s;close(c);}}')
-
-#  for i in ${procs[@]}; do
-#    IFS='|' read -r proc_pid proc_uid proc_user proc_priority proc_status proc_cpu_pct proc_mem_pct proc_run_time proc_threads proc_bin proc_args \
-#      <<< $(tr '[:upper:]' '[:lower:]' <<< ${i})
-#    label="proc_pid=\"${proc_pid}\",proc_uid=\"${proc_uid}\",proc_user=\"${proc_user}\",proc_priority=\"${proc_priority}\",proc_status=\"${proc_status}\",proc_bin=\"${proc_bin}\",proc_args=\"${proc_args}\""
-#    echo $proc_cpu_pct $proc_mem_pct $proc_run_time $proc_threads # works
-#    echo $label # works
-#    # remember to adjust the CPU% values from top - they need to be divided by core count - refer to the algod exporter to see how to do it in one clean line
-#    # this is where we will take the opportunity to POST to the Push Gateway endpoint...
-#  done
-
-  # REF: https://stackoverflow.com/questions/307502/in-linux-what-do-all-the-values-in-the-top-command-mean
-  # REF: https://manpages.ubuntu.com/manpages/xenial/man1/top.1.html
-  # in case you were wondering what the "process status" is, it is also referred to as "process state", and here is the mapping:
-  # "R": "running", "S": "sleeping", "D": "disk sleep", "T": "stopped", "t": "tracing stop", "X": "dead", "Z": "zombie", "P": "parked", "I": "idle"
-  # maybe I should translate these for readability...
+  sudo cp *.sh ${target_dir}
 
   # Create the process metrics emitter
-  file_prefix="process_metrics"
-  metrics_emitter="${file_prefix}_emitter"
-  target_dir="/etc/prometheus/push_gateway"
-  sudo mkdir -pm744 ${target_dir}
+#  file_prefix="process_metrics"
+#  metrics_emitter="${file_prefix}_emitter"
+#  target_dir="/etc/prometheus/push_gateway"
+#  sudo mkdir -pm744 ${target_dir}
 
   # Create process metrics emitter service file
   # REF: https://www.putorius.net/using-systemd-timers.html
-  {
-    echo "[Unit]"
-    echo "Description=\"Runs the process metrics emitter, publishing top service metrics to be consumed by the Prometheus Push Gateway\""
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo ""
-    echo "[Service]"
-    echo "SyslogIdentifier=${metrics_emitter}"	
-    echo "ExecStart=/bin/bash ${target_dir}/${metrics_emitter}.sh"
-  } > ${metrics_emitter}.service
+ # {
+#    echo "[Unit]"
+#    echo "Description=\"Runs the process metrics emitter, publishing top service metrics to be consumed by the Prometheus Push Gateway\""
+#    echo "Wants=network-online.target"
+#    echo "After=network-online.target"
+#    echo ""
+#    echo "[Service]"
+#    echo "SyslogIdentifier=${metrics_emitter}"	
+#    echo "ExecStart=/bin/bash ${target_dir}/${metrics_emitter}.sh"
+#  } > ${metrics_emitter}.service
 
   # Create the process metrics emitter timer file
-  {
-    echo "[Unit]"
-    echo "Description=\"Timer to run the process metrics emitter\""
-    echo ""
-    echo "[Timer]"
-    echo "Unit=${metrics_emitter}.service"
-    echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=timers.target"
-  } > ${metrics_emitter}.timer
+#  {
+#    echo "[Unit]"
+#    echo "Description=\"Timer to run the process metrics emitter\""
+#    echo ""
+#    echo "[Timer]"
+#    echo "Unit=${metrics_emitter}.service"
+#    echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
+#    echo ""
+#    echo "[Install]"
+#    echo "WantedBy=timers.target"
+#  } > ${metrics_emitter}.timer
 
   # Move the service and timer files to systemd
-  find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
+#  find . -name "${metrics_emitter}.*" -exec mv '{}' /etc/systemd/system/ \;  
   
-  # Create process metrics emitter
-  {
-    echo '#!/bin/bash'
-    echo ""
-    echo "path=\$( cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd )"
-    echo "cd \${path}"
-#    echo "dataPath=\"\${path}/collector_textfile\""
-#    echo "fileName=\"${file_prefix}.prom\""
-#    echo "file=\"\${dataPath}/\${fileName}\""
-#    echo "tmpFile=\"\${file}.tmp\""
-#    echo "lastCollected=(\$(date +%s))"
-#    echo ""
-#    echo "mapfile -t goalStatus < <(sudo -u algorand goal node status)"
-#    echo ""
-#    echo "for i in \"\${goalStatus[@]}\""
-#    echo "do"
-#    echo "  IFS=: read -r label metric <<< \$((tr '[:upper:]' '[:lower:]') <<< \${i})"
-#    echo "  metric=\$(echo \${metric} | awk '{\$1=\$1};1' | sed 's/s\$//')"
-#    echo "  case \${label} in"
-#    echo "    \"last committed block\")"
-#    echo "      lastBlock=\${metric};;"
-#    echo "    \"time since last block\")"
-#    echo "      timeSinceLastBlock=\${metric};;"
-#    echo "    \"sync time\")"
-#    echo "      syncTime=\${metric};;"
-#    echo "    \"round for next consensus protocol\")"
-#    echo "      nextConsensusRound=\${metric};;"
-#    echo "  esac"
-#    echo "done"	
-#    echo ""
-#    echo "host=\$(hostname)"
-#    echo "label=\"host=\\\"\${host}\\\"\""
-#    echo ""
-#    echo "algod_is_active=\$(systemctl is-active --quiet algorand && echo 1 || echo 0)"
-    # echo "algod_version=\$(algod -v | grep \"$(algod -c)\" | cut -d[ -f1 | awk '{\$1=\$1};1')"
-#    echo "algod_version=\$(sudo -u algorand algod -v | grep \"$(sudo -u algorand algod -c)\" | awk '{print \$1}')"
-#    echo "currentDtmz=\$(date -u +%s) # get the current datetime in epoch seconds"
-    # echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_cpu_pct algod_mem_pct algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,%cpu,%mem,cmd --no-header | tr -s ' ' | cut -d ' ' -f1,2,3,4,5,7)"
-#    echo "IFS=' ' read -r algod_pid algod_uptime_seconds algod_instance algod_instance_data_dir <<< \$(ps -p \$(pidof algod) -o pid,etimes,cmd --no-header | awk '{print \$1,\$2,\$3,\$5}')"
-#    echo "home_dir=\"/etc/prometheus/top\" && HOME=\${home_dir}"
-#    echo "IFS=' ' read -r algod_cpu_pct algod_mem_pct <<< \$(top -bn 1 -p \$(pidof algod) | tail -1 | awk '{print \$5,\$6}')"
-#    echo "algod_cpu_pct_adj=\$(d=4 && printf \"%.\${d}f\n\" \$(echo \"scale=\${d}; \$algod_cpu_pct/(\$(nproc --all))\" | bc))"
-#    echo "algod_start_timestamp_seconds=\$((\${currentDtmz}-\${algod_uptime_seconds}))"
-    # echo "date -d @${algod_start_timestamp_seconds} -Iseconds # prints the service start time in ISO format
-#    echo "algod_port=\$(cat \${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1)"
-#    echo "algod_genesis_id=\"\$(sudo -u algorand algod -G)\""
-#    echo "label_meta=\"\${label}, algod_version=\\\"\${algod_version}\\\", algod_port=\\\"\${algod_port}\\\", algod_genesis_id=\\\"\${algod_genesis_id}\\\", algod_instance=\\\"\${algod_instance}\\\", algod_instance_data_dir=\\\"\${algod_instance_data_dir}\\\", algod_pid=\\\"\${algod_pid}\\\"\""
-#    echo ""
-#    echo "{"
-#    echo "  echo \"# HELP algod_last_committed_block The most recent block of the Algorand blockchain that was received and committed to the ledger.\""
-#    echo "  echo \"# TYPE algod_last_committed_block gauge\""
-#    echo "  echo \"algod_last_committed_block {\${label}} \${lastBlock}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_time_since_last_block_seconds Time since the most recent block of the Algorand blockchain was received in seconds.\""
-#    echo "  echo \"# TYPE algod_time_since_last_block_seconds gauge\""
-#    echo "  echo \"algod_time_since_last_block_seconds {\${label}} \${timeSinceLastBlock}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_sync_time_seconds Time required to synchronize the ledger to the current Algorand blockchain state in seconds.\""
-#    echo "  echo \"# TYPE algod_sync_time_seconds gauge\""
-#    echo "  echo \"algod_sync_time_seconds {\${label}} \${syncTime}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_next_consensus_round The next consensus round (block) for the Algorand blockchain.\""
-#    echo "  echo \"# TYPE algod_next_consensus_round gauge\""
-#    echo "  echo \"algod_next_consensus_round {\${label}} \${nextConsensusRound}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_pid The current algod service process ID.\""
-#    echo "  echo \"# TYPE algod_pid gauge\""
-#    echo "  echo \"algod_pid {\${label_meta}} \${algod_pid}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_is_active The current active state of the algod service.\""
-#    echo "  echo \"# TYPE algod_is_active gauge\""
-#    echo "  echo \"algod_is_active {\${label_meta}} \${algod_is_active}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_start_timestamp_seconds Timestamp when algod service was last started in seconds since epoch (1970).\""
-#    echo "  echo \"# TYPE algod_start_timestamp_seconds gauge\""
-#    echo "  echo \"algod_start_timestamp_seconds {\${label_meta}} \${algod_start_timestamp_seconds}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_uptime_seconds Time in seconds since the algod service was last started.\""
-#    echo "  echo \"# TYPE algod_uptime_seconds gauge\""
-#    echo "  echo \"algod_uptime_seconds {\${label_meta}} \${algod_uptime_seconds}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_cpu_pct Percent CPU usage for the algod service reported by ps command.\""
-#    echo "  echo \"# TYPE algod_cpu_pct gauge\""
-#    echo "  echo \"algod_cpu_pct {\${label_meta}} \${algod_cpu_pct_adj}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_mem_pct Percent memory usage for the algod service reported by ps command.\""
-#    echo "  echo \"# TYPE algod_mem_pct gauge\""
-#    echo "  echo \"algod_mem_pct {\${label_meta}} \${algod_mem_pct}\""
-#    echo "  echo \"\""
-#    echo "  echo \"# HELP algod_metrics_last_collected_timestamp_seconds Timestamp when algod metrics were last collected in seconds since epoch (1970).\""
-#    echo "  echo \"# TYPE algod_metrics_last_collected_timestamp_seconds gauge\""
-#    echo "  echo \"algod_metrics_last_collected_timestamp_seconds {\${label}} \${lastCollected}\""
-#    echo "  echo \"\""
-#    echo "} | tee \"\${tmpFile}\" > /dev/null && sudo chown prometheus:prometheus \${tmpFile}"
-#    echo ""
-#    echo "mv -f \${tmpFile} \${file}"
-  } | sudo -u prometheus tee ${metrics_emitter}.sh > /dev/null
-
   # Apply permissions and move script to target directory
-  sudo chmod 774 *.sh
-  sudo cp ${metrics_emitter}.sh ${target_dir}
-  sudo chown -R prometheus:prometheus ${target_dir}
+#  sudo chmod 774 *.sh
+#  sudo cp ${metrics_emitter}.sh ${target_dir}
+#  sudo chown -R prometheus:prometheus ${target_dir}
 
   # Initialize the service
   echo "Initializing custom metrics emitter"
