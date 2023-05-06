@@ -57,7 +57,7 @@ algod_version=$(sudo -u algorand algod -v | grep "stable" | awk '{print $1}'); (
 algod_start_timestamp_seconds=$((${metric_dtmu}-${algod_uptime_seconds})); ((${debug})) && echo "metric: algod_start_timestamp_seconds: " ${algod_start_timestamp_seconds}
 algod_port=$(cat ${algod_instance_data_dir}/algod-listen.net | tac -s: | head -1); ((${debug})) && echo "metric: algod_port: " ${algod_port}
 algod_genesis_id="$(sudo -u algorand algod -G)"; ((${debug})) && echo "metric: algod_genesis_id: " ${algod_genesis_id}
-label_meta="${label}, algod_version=\"${algod_version}\", algod_port=\"${algod_port}\", algod_genesis_id=\"${algod_genesis_id}\", algod_instance=\"${algod_instance}\", algod_instance_data_dir=\"${algod_instance_data_dir}\", algod_pid=\"${algod_pid}\""; ((${debug})) && echo "label: label_meta: " ${label_meta}
+algod_metric_label="${metric_label}, algod_version=\"${algod_version}\", algod_port=\"${algod_port}\", algod_genesis_id=\"${algod_genesis_id}\", algod_instance=\"${algod_instance}\", algod_instance_data_dir=\"${algod_instance_data_dir}\", algod_pid=\"${algod_pid}\""; ((${debug})) && echo "metric_label: algod_metric_label: " ${algod_metric_label}
 
 emit_counter "algod_last_committed_block" "${algod_last_committed_block}" "${label}" "The most recent block of the Algorand blockchain that was received and committed to the ledger."
 emit_counter "algod_next_consensus_round" "${algod_next_consensus_round}" "${label}" "The next consensus round (block) for the Algorand blockchain."
