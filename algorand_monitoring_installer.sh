@@ -201,8 +201,8 @@ install_prometheus() {
   # Configure top command...
   # REF: https://superuser.com/questions/1052688/how-to-choose-columns-for-top-command-in-batch-mode
   echo "Configuring top command for process metrics..."
-  home_dir="/etc/prometheus/top"
-  config_file_dir="${home_dir}/.config/procps"
+  # home_dir="/etc/prometheus/top" # ~/.config/procps/toprc
+  config_file_dir="~/.config/procps"
   sudo mkdir -pm744 ${config_file_dir}
   # get the config file from GitHub
   wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/toprc
@@ -631,7 +631,7 @@ install_grafana() {
 
   # Create the geojson file
   geojson_path="/usr/share/grafana/public/maps"
-  geojson_file="node.geojson.tmp"
+  geojson_file="node.geojson"
   host=$(hostname)
   location="Pleasantville, Maryland"
   longitude="-76.442887"
