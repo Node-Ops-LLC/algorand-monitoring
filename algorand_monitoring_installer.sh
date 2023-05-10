@@ -1,109 +1,104 @@
 #!/bin/bash
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
-#
-# Installs monitoring tools for Algorand node runners:
-#  - Prometheus: a time-series database to store your metrics locally
-#  - Node Exporter: a set of collectors that gather information from your host computer - exposes a scrape target for Prometheus
-#  - Algod Metrics Emitter: a script that emits metrics about the Algorand service to Node Exporter via the textfile collector
-#  - Push Gateway: a REST gateway that accepts and caches metrics from intermittent processes - exposes a scrape target
-#  - Process Metrics Exporter: a script that emits basic but important "top" host process metrics to push gateway
-#  - Grafana: an open-source graphing and visualization tool that can organize, group and display information beautifully
-#  - Algorand dashboard: a purpose-built node monitoring dashboard derived from Node Exporter Full dashboard #1860
-#     REF: https://grafana.com/grafana/dashboards/1860-node-exporter-full/
-#
-# This install has been tested on Ubuntu 20.04.5 LTS - compatibility with other operating systems has not been verified
-#
-# A few references that helped kickstart the process of building this toolset:
-#   REF: https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
-#   REF: https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
-#   REF: https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
-#   REF: https://medium.com/swlh/intro-to-server-monitoring-b782fc82911e
-#
-# Many other references are embedded in comments below to help document the sources for various ideas and tricks...
-#
-# Support: https://discord.gg/algorand # node runners
-#
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+<<~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
-# Stop on errors
-set -e
+Installs Algorand Node Monitoring Tools:
+	- Prometheus: a time-series database to store your metrics locally
+	- Node Exporter: a set of collectors that gather information from your host computer - exposes a scrape target for Prometheus
+	- Process Metrics Emitter: a script that emits "top" host process metrics, and that can be configured with a process watch list (TBD)
+	- Algod Metrics Emitter: a script that emits metrics about the Algorand service to Node Exporter via the textfile collector
+	- Push Gateway: a REST endpoint that allows intermittent event information to be scraped by Prometheus - optional (but useful)
+	- Grafana: an open-source visualization tool that can organize, group and display information beautifully on a local or cloud interface
+	- Algorand Monitoring Dashboard: a monitoring dashboard built for Algorand nodes that can be run locally or in Grafana cloud
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+References:
+	- https://grafana.com/grafana/dashboards/1860-node-exporter-full/
+	- https://github.com/ava-labs/avalanche-monitoring/blob/main/grafana/monitoring-installer.sh
+	- https://linuxopsys.com/topics/install-prometheus-on-ubuntu 
+	- https://devconnected.com/monitoring-linux-processes-using-prometheus-and-grafana/
+	- https://medium.com/swlh/intro-to-server-monitoring-b782fc82911e
 
-# Prints usage information
+Support:
+	- https://discord.gg/algorand # node runners
+	- This script has been tested on Ubuntu 20.04 and 22.04 - compatibility with other operating systems has not been verified
+
+~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+
+# Prints usage menu
 usage () {
 
-  echo "Usage: $0 [--1|--2|--3|--4|--5|--6|--help]"
-  echo ""
-  echo "Options:"
-  echo "   --help   Show the help menu"
-  echo "   --1      Install Prometheus"
-  echo "   --2      Install Node Exporter"
-  echo "   --3      Install Algod Metrics Emitter"
-  echo "   --4      Install Push Gateway" # skip this for now...
-  echo "   --5      Install Grafana"
-  echo "   --6      Install Algorand dashboard"
-  echo ""
- 
+cat <<-//
+	
+	Usage: $0 [-1|-2|-3|-4|-5|-6|-help]
+	
+	Options:
+	  -1: Install Prometheus
+	  -2: Install Node Exporter
+	  -3: Install Algod and Process Metrics Emitters
+	  -4: Install Push Gateway
+	  -5: Install Grafana
+	  -6: Install Algorand dashboard
+	
+//
+
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+#~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Checks for required commands
-check_reqs () {
+check_requirements () {
 
-  # Check for curl
-  if ! command -v curl &> /dev/null; then # If curl is not found...
-    echo "curl could not be found, attempting to install..."
-    sudo apt-get install curl -y
-  fi
-  
-  # Check for wget
-  if ! command -v wget &> /dev/null; then # If wget is not found...
-    echo "wget could not be found, attempting to install..."
-    sudo apt-get install wget -y
-  fi
+	# Check for curl
+	if ! command -v curl &> /dev/null; then # If curl is not found...
+		echo "curl could not be found, attempting to install..."
+		sudo apt-get install curl -y
+	fi
 
-  # Check for bc
-  if ! command -v bc &> /dev/null; then # If bc is not found...
-    echo "bc could not be found, attempting to install..."
-    sudo apt-get install bc -y
-  fi
+	# Check for wget
+	if ! command -v wget &> /dev/null; then # If wget is not found...
+		echo "wget could not be found, attempting to install..."
+		sudo apt-get install wget -y
+	fi
+
+	# Check for bc
+	if ! command -v bc &> /dev/null; then # If bc is not found...
+		echo "bc could not be found, attempting to install..."
+		sudo apt-get install bc -y
+	fi
 
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+#~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Checks for supported environments
-get_environment() {
+check_environment() {
 
-  # Check system requirements
-  check_reqs
-  
-  # Get operating environment
-  foundArch="$(uname -m)" # Get system architecture
-  foundOS="$(uname)" # Get OS
-  
-  # Check operating system compatibility
-  if [ "$foundOS" != "Linux" ]; then
-    echo "Unsupported operating system: $foundOS!"
-    (exit 1)
-  fi
-  
-  # Check system architecture compatibility
-  if [ "$foundArch" = "aarch64" ]; then
-    getArch="arm64" # Running on arm arch (probably RasPi)
-  elif [ "$foundArch" = "x86_64" ]; then
-    getArch="amd64" # Running on intel/amd
-  else
-    echo "Unsupported architecture: $foundArch!"
-    (exit 1)
-  fi
+	# Check system requirements
+	check_requirements
+
+	# Get operating environment
+	system_arch = "$(uname -m)" # Get system architecture
+	system_os = "$(uname)" # Get OS
+
+	# Check operating system compatibility
+	if [ "$system_os" != "Linux" ]; then
+		echo "Unsupported operating system: $system_os!"
+		(exit 1)
+	fi
+
+	# Check system architecture compatibility
+	if [ "$system_arch" = "aarch64" ]; then
+		system_arch = "arm64" # Running on arm arch (probably RasPi)
+	elif [ "$system_arch" = "x86_64" ]; then
+		system_arch = "amd64" # Running on intel/amd
+	else
+		echo "Unsupported architecture: $system_arch!"
+		(exit 1)
+	fi
 
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+<< ~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Installs Prometheus
 install_prometheus() {
@@ -116,17 +111,17 @@ install_prometheus() {
 
   # Check if Prometheus is already installed
   if command -v  prometheus &> /dev/null; then
-    echo "Prometheus is already installed: $(command -v prometheus)"
-    (exit 1)
+	 echo "Prometheus is already installed: $(command -v prometheus)"
+	 (exit 1)
   fi
 
   # Get the latest release
   promFileName="$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
   if [[ $(wget -S --spider "${promFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-    echo "Prometheus install archive found: $promFileName"
+	 echo "Prometheus install archive found: $promFileName"
   else
-    echo "Unable to find Prometheus install archive"
-    (exit 1)
+	 echo "Unable to find Prometheus install archive"
+	 (exit 1)
   fi
 
   # Download and extract the latest release
@@ -144,14 +139,14 @@ install_prometheus() {
   # Modify the configuration file to scrape the Algod metrics endpoint
   # even if telemetry is not enabled, then 9101 will still work, and 9100 target will fail silently
   {
-    echo ""
-    echo "  - job_name: \"node-metrics\""
-    echo "    metrics_path: \"/metrics\""
-    echo "    honor_labels: true"
-    echo "    static_configs:"
-    echo "      - targets: [\"localhost:9100\", \"localhost:9101\"]"  # , \"localhost:9091\"]" # 2 node exporter, 1 push gateway
-    echo "        labels:"
-    echo "          host: \"$(hostname)\""
+	 echo ""
+	 echo "  - job_name: \"node-metrics\""
+	 echo "    metrics_path: \"/metrics\""
+	 echo "    honor_labels: true"
+	 echo "    static_configs:"
+	 echo "      - targets: [\"localhost:9100\", \"localhost:9101\"]"  # , \"localhost:9091\"]" # 2 node exporter, 1 push gateway
+	 echo "        labels:"
+	 echo "          host: \"$(hostname)\""
   } >> prometheus.yml
 
   # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
@@ -169,33 +164,33 @@ install_prometheus() {
 
   # Create the service file
   {
-    echo "[Unit]"
-    echo "Description=Prometheus"
-    echo "Documentation=https://prometheus.io/docs/introduction/overview/"
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo ""
-    echo "[Service]"
-    echo "Type=simple"
-    echo "Restart=always"
-    echo "User=prometheus"
-    echo "Group=prometheus"
-    echo "SyslogIdentifier=prometheus"
-    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
-    echo "ExecStart=/usr/local/bin/prometheus \\"
-    echo "  --config.file=/etc/prometheus/prometheus.yml \\" # Configuration file location
-    echo "  --storage.tsdb.path=/var/lib/prometheus/ \\" # Database storage location
-    echo "  --storage.tsdb.retention.size=100GB \\" # Configure this limit as desired
-    echo "  --storage.tsdb.retention.time=120d \\" # Configure this limit as desired
-    echo "  --web.console.templates=/etc/prometheus/consoles \\"
-    echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
-    echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
-    echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
-    echo "  --web.route-prefix=/ \\"
+	 echo "[Unit]"
+	 echo "Description=Prometheus"
+	 echo "Documentation=https://prometheus.io/docs/introduction/overview/"
+	 echo "Wants=network-online.target"
+	 echo "After=network-online.target"
+	 echo ""
+	 echo "[Service]"
+	 echo "Type=simple"
+	 echo "Restart=always"
+	 echo "User=prometheus"
+	 echo "Group=prometheus"
+	 echo "SyslogIdentifier=prometheus"
+	 echo "ExecReload=/bin/kill -HUP \${MAINPID}"
+	 echo "ExecStart=/usr/local/bin/prometheus \\"
+	 echo "  --config.file=/etc/prometheus/prometheus.yml \\" # Configuration file location
+	 echo "  --storage.tsdb.path=/var/lib/prometheus/ \\" # Database storage location
+	 echo "  --storage.tsdb.retention.size=100GB \\" # Configure this limit as desired
+	 echo "  --storage.tsdb.retention.time=120d \\" # Configure this limit as desired
+	 echo "  --web.console.templates=/etc/prometheus/consoles \\"
+	 echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
+	 echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
+	 echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
+	 echo "  --web.route-prefix=/ \\"
 #    echo "  --enable-feature=expand-external-labels" # REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27 # didn't seem to work anyway, maybe try some other time
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=multi-user.target"
+	 echo ""
+	 echo "[Install]"
+	 echo "WantedBy=multi-user.target"
   } > prometheus.service
 
   # Configure top command...
@@ -253,10 +248,10 @@ install_node_exporter() {
   # Get the latest release
   nodeExFileName="$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
   if [[ $(wget -S --spider "${nodeExFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-    echo "Node Exporter install archive found: $nodeExFileName"
+	 echo "Node Exporter install archive found: $nodeExFileName"
   else
-    echo "Unable to find Node Exporter install archive"
-    (exit 1)
+	 echo "Unable to find Node Exporter install archive"
+	 (exit 1)
   fi
   
   # Download and extract the latest release
@@ -277,51 +272,51 @@ install_node_exporter() {
   # Create the service file
   # REF: https://github.com/prometheus/node_exporter#node-exporter
   {
-    echo "[Unit]"
-    echo "Description=Prometheus Node Exporter"
-    echo "Documentation=https://github.com/prometheus/node_exporter"
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo ""
-    echo "[Service]"
-    echo "Type=simple"
-    echo "Restart=always"
-    echo "User=prometheus"
-    echo "Group=prometheus"
-    echo "SyslogIdentifier=node_exporter"
-    echo "ExecReload=/bin/kill -HUP \$MAINPID"
-    echo "ExecStart=/usr/local/bin/node_exporter \\"
-    echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
-    echo "  --web.telemetry-path=\"/metrics\" \\"
-    echo "  --collector.disable-defaults \\"
-    echo "  --collector.textfile \\"
-    echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
-    echo "  --collector.bonding \\" # starting from this entry down, we could eliminate everything that is duplicated on 9100 - but only if telemetry is enabled!
-    echo "  --collector.conntrack \\" # note: I never went through to determine which of these collectors is enabled for 9100, but it might be a good idea to eliminate the dups for performance and storage conservation...
-    echo "  --collector.cpu \\"
-    echo "  --collector.diskstats \\"
-    echo "  --collector.filefd \\"
-    echo "  --collector.filesystem \\"
-    echo "  --collector.hwmon \\"
-    echo "  --collector.loadavg \\"
-    echo "  --collector.mdadm \\"
-    echo "  --collector.meminfo \\"
-    echo "  --collector.netclass \\"
-    echo "  --collector.netdev \\"
-    echo "  --collector.netstat \\"
-    echo "  --collector.nvme \\"
-    echo "  --collector.os \\"
-    echo "  --collector.powersupplyclass \\"
-    echo "  --collector.processes \\"
-    echo "  --collector.systemd \\"
-    # echo "  --collector.thermal \\"
-    echo "  --collector.time \\"
-    echo "  --collector.uname \\"
-    echo "  --collector.vmstat \\"
-    echo "  --collector.zfs"
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=multi-user.target"
+	 echo "[Unit]"
+	 echo "Description=Prometheus Node Exporter"
+	 echo "Documentation=https://github.com/prometheus/node_exporter"
+	 echo "Wants=network-online.target"
+	 echo "After=network-online.target"
+	 echo ""
+	 echo "[Service]"
+	 echo "Type=simple"
+	 echo "Restart=always"
+	 echo "User=prometheus"
+	 echo "Group=prometheus"
+	 echo "SyslogIdentifier=node_exporter"
+	 echo "ExecReload=/bin/kill -HUP \$MAINPID"
+	 echo "ExecStart=/usr/local/bin/node_exporter \\"
+	 echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
+	 echo "  --web.telemetry-path=\"/metrics\" \\"
+	 echo "  --collector.disable-defaults \\"
+	 echo "  --collector.textfile \\"
+	 echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
+	 echo "  --collector.bonding \\" # starting from this entry down, we could eliminate everything that is duplicated on 9100 - but only if telemetry is enabled!
+	 echo "  --collector.conntrack \\" # note: I never went through to determine which of these collectors is enabled for 9100, but it might be a good idea to eliminate the dups for performance and storage conservation...
+	 echo "  --collector.cpu \\"
+	 echo "  --collector.diskstats \\"
+	 echo "  --collector.filefd \\"
+	 echo "  --collector.filesystem \\"
+	 echo "  --collector.hwmon \\"
+	 echo "  --collector.loadavg \\"
+	 echo "  --collector.mdadm \\"
+	 echo "  --collector.meminfo \\"
+	 echo "  --collector.netclass \\"
+	 echo "  --collector.netdev \\"
+	 echo "  --collector.netstat \\"
+	 echo "  --collector.nvme \\"
+	 echo "  --collector.os \\"
+	 echo "  --collector.powersupplyclass \\"
+	 echo "  --collector.processes \\"
+	 echo "  --collector.systemd \\"
+	 # echo "  --collector.thermal \\"
+	 echo "  --collector.time \\"
+	 echo "  --collector.uname \\"
+	 echo "  --collector.vmstat \\"
+	 echo "  --collector.zfs"
+	 echo ""
+	 echo "[Install]"
+	 echo "WantedBy=multi-user.target"
   } > node_exporter.service
   
   # Initialize the service
@@ -373,29 +368,29 @@ install_algod_metrics_emitter() {
   # Create metrics emitter service file
   # REF: https://www.putorius.net/using-systemd-timers.html
   {
-    echo "[Unit]"
-    echo "Description=\"Runs the algod service metrics emitter, publishing custom metrics to be consumed by the Prometheus Node Exporter textfile collector\""
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo "After=algorand.service"
-    echo "Requires=algorand.service"
-    echo ""
-    echo "[Service]"
-    echo "SyslogIdentifier=${metrics_emitter}"	
-    echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metrics_emitter}.sh"
+	 echo "[Unit]"
+	 echo "Description=\"Runs the algod service metrics emitter, publishing custom metrics to be consumed by the Prometheus Node Exporter textfile collector\""
+	 echo "Wants=network-online.target"
+	 echo "After=network-online.target"
+	 echo "After=algorand.service"
+	 echo "Requires=algorand.service"
+	 echo ""
+	 echo "[Service]"
+	 echo "SyslogIdentifier=${metrics_emitter}"	
+	 echo "ExecStart=/bin/bash /etc/prometheus/node_exporter/${metrics_emitter}.sh"
   } > ${metrics_emitter}.service
 
   # Create the metrics emitter timer file
   {
-    echo "[Unit]"
-    echo "Description=\"Timer to run the algod service metrics emitter\""
-    echo ""
-    echo "[Timer]"
-    echo "Unit=${metrics_emitter}.service"
-    echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=timers.target"
+	 echo "[Unit]"
+	 echo "Description=\"Timer to run the algod service metrics emitter\""
+	 echo ""
+	 echo "[Timer]"
+	 echo "Unit=${metrics_emitter}.service"
+	 echo "OnCalendar=*:*:0/15" # run the target every 15 seconds
+	 echo ""
+	 echo "[Install]"
+	 echo "WantedBy=timers.target"
   } > ${metrics_emitter}.timer
 
   # Move the service and timer files to systemd
@@ -508,16 +503,16 @@ install_push_gateway() {
   # Check if Push Gateway is already installed
   # if command -v  TKTK &> /dev/null; then
   #   echo "TKTK is already installed: $(command -v TKTK)"
-	# (exit 1)
+  # (exit 1)
   # fi
 
   # Get the latest release
   pushGatewaytFileName="$(curl -s https://api.github.com/repos/prometheus/pushgateway/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
   if [[ $(wget -S --spider "${pushGatewayFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-    echo "Push Gateway install archive found: $pushGatewayFileName"
+	 echo "Push Gateway install archive found: $pushGatewayFileName"
   else
-    echo "Unable to find Push Gateway install archive"
-    (exit 1)
+	 echo "Unable to find Push Gateway install archive"
+	 (exit 1)
   fi
 
   # Download and extract the latest release
@@ -537,25 +532,25 @@ install_push_gateway() {
 
   # Create the service file
   {
-    echo "[Unit]"
-    echo "Description=Push Gateway"
-    echo "Documentation=https://github.com/prometheus/pushgateway"
-    echo "Wants=network-online.target"
-    echo "After=network-online.target"
-    echo ""
-    echo "[Service]"
-    echo "Type=simple"
-    echo "Restart=always"
-    echo "User=prometheus"
-    echo "Group=prometheus"
-    echo "SyslogIdentifier=push_gateway"
-    echo "ExecReload=/bin/kill -HUP \${MAINPID}"
-    echo "ExecStart=/usr/local/bin/push_gateway \\"
-    echo "  --web.listen-address=0.0.0.0:9091 \\" # API endpoint
-    echo "  --web.persistence.file=/etc/prometheus/push_gateway/cache"
-    echo ""
-    echo "[Install]"
-    echo "WantedBy=multi-user.target"
+	 echo "[Unit]"
+	 echo "Description=Push Gateway"
+	 echo "Documentation=https://github.com/prometheus/pushgateway"
+	 echo "Wants=network-online.target"
+	 echo "After=network-online.target"
+	 echo ""
+	 echo "[Service]"
+	 echo "Type=simple"
+	 echo "Restart=always"
+	 echo "User=prometheus"
+	 echo "Group=prometheus"
+	 echo "SyslogIdentifier=push_gateway"
+	 echo "ExecReload=/bin/kill -HUP \${MAINPID}"
+	 echo "ExecStart=/usr/local/bin/push_gateway \\"
+	 echo "  --web.listen-address=0.0.0.0:9091 \\" # API endpoint
+	 echo "  --web.persistence.file=/etc/prometheus/push_gateway/cache"
+	 echo ""
+	 echo "[Install]"
+	 echo "WantedBy=multi-user.target"
   } > push_gateway.service
 
   # Initialize the service
@@ -595,8 +590,8 @@ install_grafana() {
 
   # Check if Grafana is already installed
   if command -v grafana-server &> /dev/null; then
-    echo "Grafana is already installed: $(command -v grafana-server)"
-    (exit 1)
+	 echo "Grafana is already installed: $(command -v grafana-server)"
+	 (exit 1)
   fi
 
   # Get the latest release
@@ -613,17 +608,17 @@ install_grafana() {
   # Configure the Prometheus datasource
   echo "Configuring data source"
   {
-    echo "apiVersion: 1"
-    echo ""
-    echo "datasources:"
-    echo "  - name: Prometheus"
-    echo "    type: prometheus"
-    echo "    access: proxy"
-    echo "    orgId: 1"
-    echo "    url: http://localhost:9090"
-    echo "    isDefault: true"
-    echo "    version: 1"
-    echo "    editable: true"
+	 echo "apiVersion: 1"
+	 echo ""
+	 echo "datasources:"
+	 echo "  - name: Prometheus"
+	 echo "    type: prometheus"
+	 echo "    access: proxy"
+	 echo "    orgId: 1"
+	 echo "    url: http://localhost:9090"
+	 echo "    isDefault: true"
+	 echo "    version: 1"
+	 echo "    editable: true"
   } > prom.yaml
   sudo cp prom.yaml /etc/grafana/provisioning/datasources/
   sudo chown -R grafana:grafana /etc/grafana/provisioning/datasources/
@@ -640,20 +635,20 @@ install_grafana() {
   provider="Verizon"
 
   {
-    echo "{"
-    echo "  \"type\":\"FeatureCollection\","
-    echo "  \"features\":["
-    echo "    { \"type\":\"Feature\","
-    echo "      \"id\":\"Node\","
-    echo "      \"properties\": {"
-    echo "        \"Host\": \"${host}\","
-    echo "        \"Location\":\"${location}\","
-    echo "        \"IP Address\": \"${ip_address}\","
-    echo "        \"Provider\": \"${provider}\" },"
-    echo "      \"geometry\": {"
-    echo "        \"type\":\"Point\","
-    echo "        \"coordinates\": [${longitude},${latitude}] }}]"
-    echo "}"
+	 echo "{"
+	 echo "  \"type\":\"FeatureCollection\","
+	 echo "  \"features\":["
+	 echo "    { \"type\":\"Feature\","
+	 echo "      \"id\":\"Node\","
+	 echo "      \"properties\": {"
+	 echo "        \"Host\": \"${host}\","
+	 echo "        \"Location\":\"${location}\","
+	 echo "        \"IP Address\": \"${ip_address}\","
+	 echo "        \"Provider\": \"${provider}\" },"
+	 echo "      \"geometry\": {"
+	 echo "        \"type\":\"Point\","
+	 echo "        \"coordinates\": [${longitude},${latitude}] }}]"
+	 echo "}"
   } > ${geojson_file} && cp ${geojson_file} ${geojson_path}
 
   # Install any required plugins now...
@@ -721,43 +716,43 @@ install_dashboard() {
   # Verify Grafana is installed
   if command -v grafana-server &> /dev/null; then
 
-    echo "Downloading dashboard from Github..."
-    sudo mkdir -pm744 grafana_dashboard
-    cd grafana_dashboard
-    wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/algorand_monitoring_dashboard.json
-    chown grafana:grafana *.json && chmod 744 *.json
-    sudo mkdir -p /etc/grafana/dashboards && chown grafana:grafana /etc/grafana/dashboards
-    sudo cp *.json /etc/grafana/dashboards
+	 echo "Downloading dashboard from Github..."
+	 sudo mkdir -pm744 grafana_dashboard
+	 cd grafana_dashboard
+	 wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/algorand_monitoring_dashboard.json
+	 chown grafana:grafana *.json && chmod 744 *.json
+	 sudo mkdir -p /etc/grafana/dashboards && chown grafana:grafana /etc/grafana/dashboards
+	 sudo cp *.json /etc/grafana/dashboards
 
-    echo "Provisioning dashboards..."
-    {
-      echo "apiVersion: 1"
-      echo ""
-      echo "providers:"
-      echo "  - name: 'Algorand Node Monitoring Dashboard'"
-      echo "    orgId: 1"
-      echo "    folder: ''"
-      echo "    folderUid: ''"
-      echo "    type: file"
-      echo "    disableDeletion: false"
-      echo "    updateIntervalSeconds: 30"
-      echo "    allowUiUpdates: true"
-      echo "    options:"
-      echo "      path: /etc/grafana/dashboards"
-      echo "      foldersFromFilesStructure: true"
-    } > algorand_node_monitoring_dashboard.yaml && chown grafana:grafana *.yaml && chmod 744 *.yaml
-    sudo cp *.yaml /etc/grafana/provisioning/dashboards/
+	 echo "Provisioning dashboards..."
+	 {
+		echo "apiVersion: 1"
+		echo ""
+		echo "providers:"
+		echo "  - name: 'Algorand Node Monitoring Dashboard'"
+		echo "    orgId: 1"
+		echo "    folder: ''"
+		echo "    folderUid: ''"
+		echo "    type: file"
+		echo "    disableDeletion: false"
+		echo "    updateIntervalSeconds: 30"
+		echo "    allowUiUpdates: true"
+		echo "    options:"
+		echo "      path: /etc/grafana/dashboards"
+		echo "      foldersFromFilesStructure: true"
+	 } > algorand_node_monitoring_dashboard.yaml && chown grafana:grafana *.yaml && chmod 744 *.yaml
+	 sudo cp *.yaml /etc/grafana/provisioning/dashboards/
 
-    echo "Restarting service"
-    sudo systemctl daemon-reload
-    sudo systemctl restart grafana-server
+	 echo "Restarting service"
+	 sudo systemctl daemon-reload
+	 sudo systemctl restart grafana-server
 
-    cd..
+	 cd..
 
   else
   
-    echo "Grafana is not installed!"
-    (exit 1)
+	 echo "Grafana is not installed!"
+	 (exit 1)
 
   fi
 
@@ -773,37 +768,22 @@ install_dashboard() {
   
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
-# Main
+~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Checks the operating environment
-get_environment
+check_environment
 
 # Check input argument
-if [ -z $1 ]; then
-  echo "Please choose an option"
-else
-  case $1 in
-    --1) # Install Prometheus
-      install_prometheus;;
-    --2) # Install Node Exporter
-      install_node_exporter;;
-    --3) # Install Algod Metrics Emitter
-      install_algod_metrics_emitter;;
-    --4) # Install Push Gateway - skip this step for now, the install will be retained if needed in the future
-      install_push_gateway;;
-    --5) # Install Grafana
-      install_grafana;;
-    --6) # Install Algorand dashboard
-      install_dashboard;;
-    --help) # Print usage
-      usage;;
-    *) # Any other argument
-      echo "Please choose a supported option"
-      (exit 1);;
-  esac
-fi
-               
+case $1 in
+	--1|-1|1) install_prometheus;;
+	--2|-2|2) install_node_exporter;;
+	--3|-3|3) install_algod_metrics_emitter;;
+	--4|-4|4) install_push_gateway;;
+	--5|-5|5) install_grafana;;
+	--6|-6|6) install_dashboard;;
+	*) usage;;
+esac
+
 (exit 0)
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+#~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~

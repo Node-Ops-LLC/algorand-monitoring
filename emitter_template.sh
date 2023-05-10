@@ -1,14 +1,12 @@
-# Template for Process Metric Emitter Sources - remove this line and place at the top of emitter script
+# Template for Process Metrics Emitter - place at the top of your process emitter script
+# Note: process metrics emitter file should be named ${process_name}_metrics_emitter.sh ex: "algod_metrics_emitter.sh"
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
-  # Source
-  source_file="$(dirname $(realpath "$0"))/process_metric_emitter.sh"; echo "Source file:" ${source_file}
-  [ -f ${source_file} ] || (echo "Source file ${source_file} not found!"; (exit 1);); echo "Check: ${source_file} ok!"
+  # Source file "process_metrics_emitter.sh" must be found in the same directory as your custom emitter
+  source_file="$(dirname $(realpath "$0"))/process_metrics_emitter.sh"; ((${debug})) && echo "Source file:" ${source_file}
+  [ -f ${source_file} ] || (echo "Source file ${source_file} not found!"; (exit 1);); ((${debug})) && echo "Check: ${source_file} ok!"
   source ${source_file}; ((${debug})) && echo "Source ${source_file} set!"
-
-  # Emitter script should be named using the pattern ${process_name}_metric_emitter.sh
-  # If >1 process, override process list, but default is ${process_name} from file name prefix, ie "algod_process_emitter"
 
 #-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
 
