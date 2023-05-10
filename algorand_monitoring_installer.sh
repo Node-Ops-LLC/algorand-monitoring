@@ -81,18 +81,19 @@ check_environment() {
 	system_os = "$(uname)" # Get OS
 
 	# Check operating system compatibility
-	if [ "$system_os" != "Linux" ]; then
-		echo "Unsupported operating system: $system_os!"
+	if [ ${system_os} != "Linux" ]; then
+		echo "Unsupported operating system: ${system_os}!"
 		(exit 1)
 	fi
 
 	# Check system architecture compatibility
-	if [ "$system_arch" = "aarch64" ]; then
+	if [ ${system_arch} = "aarch64" ]; then
 		system_arch = "arm64" # Running on arm arch (probably RasPi)
-	elif [ "$system_arch" = "x86_64" ]; then
+	elif [ ${system_arch} = "x86_64" ]; then
+		echo "${system_arch}"
 		system_arch = "amd64" # Running on intel/amd
 	else
-		echo "Unsupported architecture: $system_arch!"
+		echo "Unsupported architecture: ${system_arch}!"
 		(exit 1)
 	fi
 
