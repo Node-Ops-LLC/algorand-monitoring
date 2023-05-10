@@ -27,19 +27,19 @@ Support:
 # Prints usage menu
 usage () {
 
-cat <<-//
-	
-	Usage: $0 [-1|-2|-3|-4|-5|-6|-help]
-	
-	Options:
-	  -1: Install Prometheus
-	  -2: Install Node Exporter
-	  -3: Install Algod and Process Metrics Emitters
-	  -4: Install Push Gateway
-	  -5: Install Grafana
-	  -6: Install Algorand dashboard
-	
-//
+	cat <<-//
+		
+		Usage: $0 [-1|-2|-3|-4|-5|-6|-help]
+		
+		Options:
+		-1: Install Prometheus
+		-2: Install Node Exporter
+		-3: Install Algod and Process Metrics Emitters
+		-4: Install Push Gateway
+		-5: Install Grafana
+		-6: Install Algorand dashboard
+		
+	//
 
 }
 
@@ -98,253 +98,258 @@ check_environment() {
 
 }
 
-<< ~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+#~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Installs Prometheus
 install_prometheus() {
 
-  # Print header
-  echo "";
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Installing Prometheus";
-  echo "";
+	# Print header
+	cat <<-//
 
-  # Check if Prometheus is already installed
-  if command -v  prometheus &> /dev/null; then
-	 echo "Prometheus is already installed: $(command -v prometheus)"
-	 (exit 1)
-  fi
+		~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+		Installing Prometheus
 
-  # Get the latest release
-  promFileName="$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
-  if [[ $(wget -S --spider "${promFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-	 echo "Prometheus install archive found: $promFileName"
-  else
-	 echo "Unable to find Prometheus install archive"
-	 (exit 1)
-  fi
+	//
 
-  # Download and extract the latest release
-  echo "Downloading: ${promFileName}"
-  wget -nv --show-progress -O prometheus.tar.gz "${promFileName}"
-  sudo mkdir -pm744 prometheus
-  tar -xvf prometheus.tar.gz -C prometheus --strip-components=1
-  cd prometheus
+	# Check if Prometheus is already installed
+	if command -v  prometheus &> /dev/null; then
+		echo "Prometheus is already installed: $(command -v prometheus)"
+		(exit 1)
+	fi
 
-  # Add group, user and directories
-  sudo groupadd --system prometheus
-  sudo useradd -s /sbin/nologin -M --system -g prometheus prometheus
-  sudo mkdir -pm744 /etc/prometheus /var/lib/prometheus
+	# Get the latest release
+	prometheus_file_name="$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep -o "http.*linux-${system_arch}\.tar\.gz")"
+	if [[ $(wget -S --spider ${prometheus_file_name}  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+		echo "Prometheus install archive found: $prometheus_file_name"
+	else
+		echo "Unable to find Prometheus install archive"
+		(exit 1)
+	fi
 
-  # Modify the configuration file to scrape the Algod metrics endpoint
-  # even if telemetry is not enabled, then 9101 will still work, and 9100 target will fail silently
-  {
-	 echo ""
-	 echo "  - job_name: \"node-metrics\""
-	 echo "    metrics_path: \"/metrics\""
-	 echo "    honor_labels: true"
-	 echo "    static_configs:"
-	 echo "      - targets: [\"localhost:9100\", \"localhost:9101\"]"  # , \"localhost:9091\"]" # 2 node exporter, 1 push gateway
-	 echo "        labels:"
-	 echo "          host: \"$(hostname)\""
-  } >> prometheus.yml
+	# Download and extract the latest release
+	echo "Downloading: ${prometheus_file_name}"
+	wget -nv --show-progress -O prometheus.tar.gz ${prometheus_file_name}
+	sudo mkdir -pm744 prometheus
+	tar -xvf prometheus.tar.gz -C prometheus --strip-components=1
+	cd prometheus
 
-  # REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel
-  #relabel_configs:
-  #- source_labels: [__address__]
-  #  regex: (.*):9100
-  #  replacement: $1
-  #  target_label: cshost
+	# Add group, user and directories
+	sudo groupadd --system prometheus
+	sudo useradd -s /sbin/nologin -M --system -g prometheus prometheus
+	sudo mkdir -pm744 /etc/prometheus /var/lib/prometheus
 
-  # Move files to target directories and apply permissions
-  sudo cp {prometheus,promtool} /usr/local/bin/
-  sudo cp -r {consoles,console_libraries,prometheus.yml} /etc/prometheus/
-  sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
-  sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
+	# Modify the configuration file to scrape the Algod metrics endpoint
+	# even if telemetry is not enabled, then 9101 will still work, and 9100 target will fail silently
+	# REF: https://utcc.utoronto.ca/~cks/space/blog/sysadmin/PrometheusAddHostnameLabel (not used)
+	cat <<-// >> prometheus.yml
 
-  # Create the service file
-  {
-	 echo "[Unit]"
-	 echo "Description=Prometheus"
-	 echo "Documentation=https://prometheus.io/docs/introduction/overview/"
-	 echo "Wants=network-online.target"
-	 echo "After=network-online.target"
-	 echo ""
-	 echo "[Service]"
-	 echo "Type=simple"
-	 echo "Restart=always"
-	 echo "User=prometheus"
-	 echo "Group=prometheus"
-	 echo "SyslogIdentifier=prometheus"
-	 echo "ExecReload=/bin/kill -HUP \${MAINPID}"
-	 echo "ExecStart=/usr/local/bin/prometheus \\"
-	 echo "  --config.file=/etc/prometheus/prometheus.yml \\" # Configuration file location
-	 echo "  --storage.tsdb.path=/var/lib/prometheus/ \\" # Database storage location
-	 echo "  --storage.tsdb.retention.size=100GB \\" # Configure this limit as desired
-	 echo "  --storage.tsdb.retention.time=120d \\" # Configure this limit as desired
-	 echo "  --web.console.templates=/etc/prometheus/consoles \\"
-	 echo "  --web.console.libraries=/etc/prometheus/console_libraries \\"
-	 echo "  --web.listen-address=0.0.0.0:9090 \\" # Query interface
-	 echo "  --web.external-url=http://localhost:9090 \\" # To secure from external access, leave the port closed
-	 echo "  --web.route-prefix=/ \\"
-#    echo "  --enable-feature=expand-external-labels" # REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27 # didn't seem to work anyway, maybe try some other time
-	 echo ""
-	 echo "[Install]"
-	 echo "WantedBy=multi-user.target"
-  } > prometheus.service
+		  - job_name: "node-metrics"
+		    metrics_path: "/metrics"
+		    honor_labels: true
+		    static_configs:
+		      - targets: ["localhost:9100", "localhost:9101"]
+		        labels:
+		          host: "$(hostname)"
 
-  # Configure top command...
-  # REF: https://superuser.com/questions/1052688/how-to-choose-columns-for-top-command-in-batch-mode
-  echo "Configuring top command for process metrics..."
-  # home_dir="/etc/prometheus/top" # ~/.config/procps/toprc
-  config_file_dir="~/.config/procps"
-  sudo mkdir -pm744 ${config_file_dir}
-  # get the config file from GitHub
-  wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/toprc
-  sudo mv toprc ${config_file_dir}
-  sudo chown -R prometheus:prometheus ${config_file_dir}
+	//
 
-  # Initialize the service
-  echo "Initializing service"
-  sudo cp prometheus.service /etc/systemd/system/prometheus.service
-  sudo systemctl daemon-reload
-  sudo systemctl start prometheus
-  sudo systemctl enable prometheus
-  cd ..
+	# Move files to target directories and apply permissions
+	sudo cp {prometheus,promtool} /usr/local/bin/
+	sudo cp -r {consoles,console_libraries,prometheus.yml} /etc/prometheus/
+	sudo chown -R prometheus:prometheus /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
+	sudo chmod -R 744 /etc/prometheus/ /var/lib/prometheus/ /usr/local/bin/{prometheus,promtool}
 
-  # Print footer
-  echo ""
-  echo "Prometheus is installed!"
-  echo ""
-  echo "Verify the service is running with the following command (q to exit):"
-  echo "  \$ sudo systemctl status prometheus"
-  echo ""
-  echo "Query the database using this endpoint:"
-  echo "  http://<your-host-ip>:9090"
-  echo ""
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
-  echo ""
+	# Create the service file
+	#  --enable-feature=expand-external-labels
+	# REF: https://promlabs.com/blog/2021/05/16/whats-new-in-prometheus-2-27 # try again some other time
+	cat <<-// >> prometheus.service
+		[Unit]
+		Description=Prometheus
+		Documentation=https://prometheus.io/docs/introduction/overview/
+		Wants=network-online.target
+		After=network-online.target
+		
+		[Service]
+		Type=simple
+		Restart=always
+		User=prometheus
+		Group=prometheus
+		SyslogIdentifier=prometheus
+		ExecReload=/bin/kill -HUP ${MAINPID}
+		ExecStart=/usr/local/bin/prometheus
+		  --config.file=/etc/prometheus/prometheus.yml \ # Configuration file location
+		  --storage.tsdb.path=/var/lib/prometheus \ # Database storage location
+		  --storage.tsdb.retention.size=100GB \ # Configure this limit as desired
+		  --storage.tsdb.retention.time=120d \ # Configure this limit as desired
+		  --web.console.templates=/etc/prometheus/consoles \
+		  --web.console.libraries=/etc/prometheus/console_libraries \
+		  --web.listen-address=0.0.0.0:9090 \ # Query interface
+		  --web.external-url=http://localhost:9090 \ # To secure from external access, leave the port closed
+		  --web.route-prefix=/ \
+		
+		[Install]
+		WantedBy=multi-user.target
+	//
+
+	# Configure top command...
+	# REF: https://superuser.com/questions/1052688/how-to-choose-columns-for-top-command-in-batch-mode
+	echo "Configuring top command for process metrics..."
+	# home_dir="/etc/prometheus/top" # ~/.config/procps/toprc
+	top_config_dir="~/.config/procps"
+	sudo mkdir -pm744 ${top_config_dir}
+	# get the config file from GitHub
+	wget -nd -m -nv https://raw.githubusercontent.com/node-ops-llc/algorand-monitoring/main/toprc
+	sudo mv toprc ${top_config_dir}
+	sudo chown -R prometheus:prometheus ${top_config_dir}
+
+	# Initialize the service
+	echo "Initializing service"
+	sudo cp prometheus.service /etc/systemd/system/prometheus.service
+	sudo systemctl daemon-reload
+	sudo systemctl start prometheus
+	sudo systemctl enable prometheus
+	cd ..
+
+	# Print footer
+	cat <<-//
+
+		Prometheus is installed!
+		
+		Verify the service is running with the following command (q to exit):
+		$ sudo systemctl status prometheus
+		
+		Query the database using this endpoint:
+		http://<your-host-ip>:9090 (or http://localhost:9090)
+		
+		~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+	
+	//
 
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+#~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Installs Node Exporter
 install_node_exporter() {
 
-  # Print header
-  echo;
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-";
-  echo "Installing Node Exporter";
-  echo;
+	# Print header
+	cat <<-//
 
-  # Check if Node Exporter is already installed
-  # if command -v  node_exporter &> /dev/null; then
-  # echo "Node Exporter is already installed: $(command -v node_exporter)"
-  # (exit 1)
-  # fi # This should be implemented, but the default Algod install includes node_exporter in /usr/bin/ as part of the managed package
-  # This would instead need to check for node_exporter in path /usr/local/bin/
+		~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+		Installing Node Exporter
 
-  # Get the latest release
-  nodeExFileName="$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep -o "http.*linux-${getArch}\.tar\.gz")"
-  if [[ $(wget -S --spider "${nodeExFileName}"  2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
-	 echo "Node Exporter install archive found: $nodeExFileName"
-  else
-	 echo "Unable to find Node Exporter install archive"
-	 (exit 1)
-  fi
-  
-  # Download and extract the latest release
-  echo "Downloading: ${nodeExFileName}"
-  wget -nv --show-progress -O node_exporter.tar.gz "${nodeExFileName}"
-  sudo mkdir -pm744 node_exporter
-  tar -xvf node_exporter.tar.gz -C node_exporter --strip-components=1
-  cd node_exporter
+	//
 
-  # Add directory
-  sudo mkdir -pm744 /etc/prometheus/node_exporter/collector_textfile
+	# Check if Node Exporter is already installed
+	# if command -v  node_exporter &> /dev/null; then
+	# echo "Node Exporter is already installed: $(command -v node_exporter)"
+	# (exit 1)
+	# fi # This should be implemented, but the default Algod install includes node_exporter in /usr/bin/ as part of the managed package
+	# This would instead need to check for node_exporter in path /usr/local/bin/
 
-  # Move files to target directories and apply permissions
-  sudo cp node_exporter /usr/local/bin
-  sudo chown -R prometheus:prometheus /usr/local/bin/node_exporter /etc/prometheus/
-  sudo chmod -R 744 /usr/local/bin/node_exporter /etc/prometheus/
+	# Get the latest release
+	node_exporter_file_name="$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep -o "http.*linux-${system_arch}\.tar\.gz")"
+	if [[ $(wget -S --spider ${node_exporter_file_name} 2>&1 | grep 'HTTP/1.1 200 OK') ]]; then
+		echo "Node Exporter install archive found: $node_exporter_file_name"
+	else
+		echo "Unable to find Node Exporter install archive"
+		(exit 1)
+	fi
+
+	# Download and extract the latest release
+	echo "Downloading: ${node_exporter_file_name}"
+	wget -nv --show-progress -O node_exporter.tar.gz "${node_exporter_file_name}"
+	sudo mkdir -pm744 node_exporter
+	tar -xvf node_exporter.tar.gz -C node_exporter --strip-components=1
+	cd node_exporter
+
+	# Add directory
+	sudo mkdir -pm744 /etc/prometheus/node_exporter/collector_textfile
+
+	# Move files to target directories and apply permissions
+	sudo cp node_exporter /usr/local/bin
+	sudo chown -R prometheus:prometheus /usr/local/bin/node_exporter /etc/prometheus/
+	sudo chmod -R 744 /usr/local/bin/node_exporter /etc/prometheus/
 
   # Create the service file
   # REF: https://github.com/prometheus/node_exporter#node-exporter
-  {
-	 echo "[Unit]"
-	 echo "Description=Prometheus Node Exporter"
-	 echo "Documentation=https://github.com/prometheus/node_exporter"
-	 echo "Wants=network-online.target"
-	 echo "After=network-online.target"
-	 echo ""
-	 echo "[Service]"
-	 echo "Type=simple"
-	 echo "Restart=always"
-	 echo "User=prometheus"
-	 echo "Group=prometheus"
-	 echo "SyslogIdentifier=node_exporter"
-	 echo "ExecReload=/bin/kill -HUP \$MAINPID"
-	 echo "ExecStart=/usr/local/bin/node_exporter \\"
-	 echo "  --web.listen-address=:9101 \\" # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
-	 echo "  --web.telemetry-path=\"/metrics\" \\"
-	 echo "  --collector.disable-defaults \\"
-	 echo "  --collector.textfile \\"
-	 echo "  --collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \\"
-	 echo "  --collector.bonding \\" # starting from this entry down, we could eliminate everything that is duplicated on 9100 - but only if telemetry is enabled!
-	 echo "  --collector.conntrack \\" # note: I never went through to determine which of these collectors is enabled for 9100, but it might be a good idea to eliminate the dups for performance and storage conservation...
-	 echo "  --collector.cpu \\"
-	 echo "  --collector.diskstats \\"
-	 echo "  --collector.filefd \\"
-	 echo "  --collector.filesystem \\"
-	 echo "  --collector.hwmon \\"
-	 echo "  --collector.loadavg \\"
-	 echo "  --collector.mdadm \\"
-	 echo "  --collector.meminfo \\"
-	 echo "  --collector.netclass \\"
-	 echo "  --collector.netdev \\"
-	 echo "  --collector.netstat \\"
-	 echo "  --collector.nvme \\"
-	 echo "  --collector.os \\"
-	 echo "  --collector.powersupplyclass \\"
-	 echo "  --collector.processes \\"
-	 echo "  --collector.systemd \\"
-	 # echo "  --collector.thermal \\"
-	 echo "  --collector.time \\"
-	 echo "  --collector.uname \\"
-	 echo "  --collector.vmstat \\"
-	 echo "  --collector.zfs"
-	 echo ""
-	 echo "[Install]"
-	 echo "WantedBy=multi-user.target"
-  } > node_exporter.service
-  
-  # Initialize the service
-  echo "Initializing service"
-  sudo cp node_exporter.service /etc/systemd/system/node_exporter.service
-  sudo systemctl daemon-reload
-  sudo systemctl start node_exporter
-  sudo systemctl enable node_exporter
-  sudo systemctl restart prometheus
+	cat <<-'//' >> node_exporter.service
+		
+		[Unit]
+		Description=Prometheus Node Exporter
+		Documentation=https://github.com/prometheus/node_exporter
+		Wants=network-online.target
+		After=network-online.target
+		
+		[Service]
+		Type=simple
+		Restart=always
+		User=prometheus
+		Group=prometheus
+		SyslogIdentifier=node_exporter
+		ExecReload=/bin/kill -HUP $MAINPID
+		ExecStart=/usr/local/bin/node_exporter \
+		--web.listen-address=:9101 \ # Note: Algorand uses 9100 for its default metrics endpoint, so use 9101
+		--web.telemetry-path="/metrics" \
+		--collector.disable-defaults \
+		--collector.textfile \
+		--collector.textfile.directory=/etc/prometheus/node_exporter/collector_textfile/ \
+		--collector.bonding \ # starting from this entry down, we could eliminate everything that is duplicated on 9100 - but only if telemetry is enabled!
+		--collector.conntrack \ # note: I never went through to determine which of these collectors is enabled for 9100, but it might be a good idea to eliminate the dups for performance and storage conservation...
+		--collector.cpu \
+		--collector.diskstats \
+		--collector.filefd \
+		--collector.filesystem \
+		--collector.hwmon \
+		--collector.loadavg \
+		--collector.mdadm \
+		--collector.meminfo \
+		--collector.netclass \
+		--collector.netdev \
+		--collector.netstat \
+		--collector.nvme \
+		--collector.os \
+		--collector.powersupplyclass \
+		--collector.processes \
+		--collector.systemd \
+		# --collector.thermal \
+		--collector.time \
+		--collector.uname \
+		--collector.vmstat \
+		--collector.zfs
 
-  cd ..
+		[Install]
+		WantedBy=multi-user.target
+	//
 
-  # Print footer
-  echo ""
-  echo "Prometheus Node Exporter is installed!"
-  echo ""
-  echo "Verify the service is running with the following command (q to exit):"
-  echo "  \$ sudo systemctl status node_exporter"
-  echo ""
-  echo "View metrics using this endpoint:"
-  echo "  http://<your-host-ip>:9101/metrics"
-  echo ""
-  echo "-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-"
-  echo ""
-  
+	# Initialize the service
+	echo "Initializing service"
+	sudo cp node_exporter.service /etc/systemd/system/node_exporter.service
+	sudo systemctl daemon-reload
+	sudo systemctl start node_exporter
+	sudo systemctl enable node_exporter
+	sudo systemctl restart prometheus
+
+	cd ..
+
+	# Print footer
+	cat <<-//
+
+		Prometheus Node Exporter is installed!
+		
+		Verify the service is running with the following command (q to exit):
+		$ sudo systemctl status node_exporter
+		
+		View metrics using this endpoint:
+		http://<your-host-ip>:9101/metrics (or http://localhost:9101/metrics)
+		
+		~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
+	
+	//
+
 }
 
-#-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-
+<<~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~
 
 # Installs Metrics Emitters
 install_algod_metrics_emitter() {
