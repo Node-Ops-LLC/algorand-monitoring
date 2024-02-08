@@ -1,0 +1,10 @@
+{
+  "Archival": false,
+  "BaseLoggerDebugLevel": 3,
+  "EndpointAddress": "0.0.0.0:8080",
+  "EnableMetricReporting": true,
+  "NodeExporterPath": "/node/bin/node_exporter",
+  "EnableRuntimeMetrics": true,
+  "EnableLedgerService": true,
+  "EnableBlockService": true
+}

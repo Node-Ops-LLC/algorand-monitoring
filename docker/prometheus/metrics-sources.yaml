@@ -1,0 +1,5 @@
+- labels:
+    job: node-metrics
+    env: mainnet
+  targets:
+    - localhost:9100

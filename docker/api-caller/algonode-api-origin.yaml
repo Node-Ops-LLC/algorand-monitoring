@@ -1,0 +1,12 @@
+---
+- origin: algomon-algonode
+  apis:
+    - api: algod
+      path: "http://localhost:8080"
+      header: X-Algo-API-Token
+      token: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+    - api: kmd
+      path: "http://localhost:7833"
+      header: X-KMD-API-Token
+      token: "45fad3f8ab9a1c418496657a31cbaeec5440d3cceb77df86e0cb0e9c328ba167"
+- origin: foo-bar

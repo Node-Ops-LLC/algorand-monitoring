@@ -1,0 +1,4 @@
+FROM algorand/algod:latest
+
+RUN chown -R 65534:65534 /algod/data
+RUN goal kmd start

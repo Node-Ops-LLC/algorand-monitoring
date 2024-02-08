@@ -1,0 +1,3 @@
+FROM prom/prometheus:latest
+
+RUN chown -R 65534:65534 /prometheus

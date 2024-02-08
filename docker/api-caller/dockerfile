@@ -1,0 +1,23 @@
+FROM ubuntu:latest
+
+RUN mkdir -p /etc/algomon/api-caller;
+
+# Install wget
+RUN apt-get update &&\
+    apt-get install -y wget curl cron jq;
+
+# Install yq
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq;
+
+# Create cron job to run algonode-api-caller
+# RUN touch /etc/crontab /etc/cron.*/*;
+# RUN cron_cmd="/usr/share/elasticsearch/config/algonode-api-caller.sh >> /var/log/cron.log 2>&1" &&\
+# RUN chmod 0744 /usr/share/elasticsearch/config/algonode-api-caller.sh
+RUN cron_cmd="bash /etc/algomon/api-caller/algonode-api-caller.sh > /proc/1/fd/1 2>/proc/1/fd/2" &&\
+    cron_schedule="* * * * *" &&\
+    cron_job="${cron_schedule} ${cron_cmd}" &&\
+    echo "${cron_job}" | crontab -;
+
+# RUN ( /usr/bin/crontab -l | grep -v -F "${cron_cmd}" || : ; echo "${cron_job}" ) | /usr/bin/crontab -;
+
+CMD ["cron", "-f"]

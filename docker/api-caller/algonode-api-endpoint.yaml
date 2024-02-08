@@ -1,0 +1,19 @@
+- api: algod
+  endpoints:
+  - endpoint: status
+    method: GET
+    path: /v2/status
+    query:
+    elastic_index: stable-mainnet-v1.0
+  - endpoint: version
+    method: GET
+    path: /versions
+    query:
+    elastic_index: stable-mainnet-v1.0
+- api: kmd
+  endpoints:
+  - endpoint: version
+    method: GET
+    path: /versions
+    query:
+    elastic_index: stable-mainnet-v1.0
