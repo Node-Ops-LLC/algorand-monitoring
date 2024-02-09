@@ -1,5 +1,5 @@
 FROM docker.elastic.co/elasticsearch/elasticsearch:6.8.23
 
 RUN curl 'http://localhost:9200/_all/_settings?preserve_existing=true' -d '{ \
-           "index.number_of_replicas" : "0", \
-           "index.number_of_shards" : "1" }';
+      "index.number_of_replicas" : "0", \
+      "index.number_of_shards" : "1" }';
