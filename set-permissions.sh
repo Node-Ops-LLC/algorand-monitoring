@@ -3,7 +3,7 @@
 
 # -~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-
 # Statics
-source="$(readlink -f "{$0}")"
+source="$(readlink -f .)"
 echo "source: ${source}"
 source_dir="$(dirname "${source}")"
 echo "source_dir: ${source_dir}"
