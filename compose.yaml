@@ -38,7 +38,6 @@ services:
       - ELASTIC_PASSWORD=elastic
       - xpack.security.enabled=false # for v6.8
 #     - xpack.security.http.ssl.enabled="false" # for v8.10
-    command: pwd #curl -XPUT -H "Content-Type: application/json" "http://localhost:9200/_template/template_1" -d '{"index_patterns" : ["*"], "order": 0, "settings": {"number_of_shards": 1, "number_of_replicas": 0}}'
     healthcheck:
       #test: curl -s http://localhost:9200/_cat/health | grep -q "green\|yellow"
       test: /usr/share/elasticsearch/config/healthcheck.sh
