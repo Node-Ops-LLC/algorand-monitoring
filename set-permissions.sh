@@ -3,15 +3,16 @@
 
 # -~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-
 # Statics
-source="$(readlink -f "$0}")"
+source="$(readlink -f "{$0}")"
+echo "source: ${source}"
 source_dir="$(dirname "${source}")"
+echo "source_dir: ${source_dir}"
 
 # -~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-
 # Code
 
 # switch to the script directory
-echo "source_dir: ${source_dir}"
-cd "${source_dir}";
+cd "${source_dir}" && pwd;
 
 # apply permissions to data directories
 chown -R nobody:nogroup prometheus/data # Prometheus
