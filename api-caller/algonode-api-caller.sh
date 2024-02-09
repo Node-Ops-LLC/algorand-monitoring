@@ -4,7 +4,7 @@
 # -~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-+-~-
 # Statics
 #source="$(readlink -f "{$0}")"
-source="$(readlink -f "{$0}")"
+source="$(readlink -f "$0")"
 source_dir="$(dirname "${source}")"
 origin_cfg="algonode-api-origin.yaml"
 endpoint_cfg="algonode-api-endpoint.yaml"
