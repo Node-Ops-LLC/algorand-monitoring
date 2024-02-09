@@ -1,11 +1,4 @@
 FROM docker.elastic.co/elasticsearch/elasticsearch:6.8.23
 
-RUN curl -XPUT -H "Content-Type: application/json" "http://localhost:9200/_template/template_1" -d ' \
-  { \
-    "index_patterns" : ["*"], \
-    "order": 0, \
-    "settings": { \
-    "number_of_shards": 1, \
-    "number_of_replicas": 0 \
-    } \
-  }';
+COPY ./healthcheck.sh /usr/share/elasticsearch/config/healthcheck.sh
+RUN chmod 777 /usr/share/elasticsearch/config/healthcheck.sh
