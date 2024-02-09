@@ -5,7 +5,7 @@ services:
     container_name: algomon-prometheus
     hostname: algomon-prometheus
     build: ./prometheus
-    restart: unless-stopped
+    restart: always
     network_mode: host
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
@@ -24,7 +24,7 @@ services:
     container_name: algomon-elasticsearch
     hostname: algomon-elasticsearch
     build: ./elasticsearch
-    restart: unless-stopped
+    restart: always
     network_mode: host
     volumes:
       - ./elasticsearch/data:/usr/share/elasticsearch/data # note: $ chown -R 1000:1000 ./data
@@ -50,7 +50,7 @@ services:
     container_name: algomon-api-caller
     hostname: algomon-api-caller
     build: ./api-caller
-    restart: unless-stopped
+    restart: always
     tty: true
     depends_on:
       algomon-elasticsearch:
@@ -60,13 +60,20 @@ services:
       - ./api-caller/algonode-api-origin.yaml:/etc/algomon/api-caller/algonode-api-origin.yaml
       - ./api-caller/algonode-api-endpoint.yaml:/etc/algomon/api-caller/algonode-api-endpoint.yaml
       - ./api-caller/algonode-api-caller.sh:/etc/algomon/api-caller/algonode-api-caller.sh
+#    healthcheck:
+#      test: ps -o user,pid,start,cmd -N --ppid $$ | grep cron
+      # test: sh -c 'exec ps --no-headers -N --ppid "$$" -o pid,start,comm,cmd' | grep -v "grep" | tac | grep -m1 "algonod>
+#      interval: 30s
+#      retries: 7
+#      start_period: 60s
+#      timeout: 10s
 
   algomon-grafana:
     image: algomon/grafana/grafana:latest
     container_name: algomon-grafana
     hostname: algomon-grafana
     build: ./grafana
-    restart: unless-stopped
+    restart: always
     depends_on:
       algomon-prometheus:
         condition: "service_healthy"
@@ -107,7 +114,7 @@ services:
     container_name: algomon-algonode
     hostname: algomon-algonode
     build: ./algorand
-    restart: unless-stopped
+    restart: always
     depends_on:
       algomon-grafana:
         condition: "service_healthy"
