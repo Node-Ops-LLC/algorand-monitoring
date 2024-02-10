@@ -13,10 +13,9 @@ services:
       - ./prometheus/data:/prometheus # note: $ chown -R nobody:nogroup ./data
     healthcheck:
       test: wget -qO- http://localhost:9090/-/healthy | grep -q "Healthy"
-      interval: 5s
-      retries: 7
+      retries: 5
       start_period: 15s
-      timeout: 4s
+      timeout: 10s
 
   algomon-elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23 # for compatibility with algo lib
@@ -39,10 +38,8 @@ services:
       - xpack.security.enabled=false # for v6.8
 #     - xpack.security.http.ssl.enabled="false" # for v8.10
     healthcheck:
-      #test: curl -s http://localhost:9200/_cat/health | grep -q "green\|yellow"
       test: /usr/share/elasticsearch/config/healthcheck.sh
-      #interval: 5s # allow default of 30s
-      retries: 7
+      retries: 5
       start_period: 15s
       timeout: 10s
 
@@ -64,9 +61,8 @@ services:
 #    healthcheck:
 #      test: ps -o user,pid,start,cmd -N --ppid $$ | grep cron
       # test: sh -c 'exec ps --no-headers -N --ppid "$$" -o pid,start,comm,cmd' | grep -v "grep" | tac | grep -m1 "algonod>
-#      interval: 30s
-#      retries: 7
-#      start_period: 60s
+#      retries: 5
+#      start_period: 15s
 #      timeout: 10s
 
   algomon-grafana:
@@ -105,10 +101,9 @@ services:
       - GF_INSTALL_PLUGINS=grafana-opensearch-datasource
     healthcheck:
       test: curl -s http://localhost:3000/api/health | grep -q "ok"
-      interval: 5s
-      retries: 7
+      retries: 5
       start_period: 15s
-      timeout: 4s
+      timeout: 10s
 
   algomon-algonode:
     image: algomon/algorand/algod:latest
@@ -134,7 +129,6 @@ services:
       - KMD_TOKEN=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1
     healthcheck:
       test: curl -sw "%{response_code}\n" http://localhost:8080/health | grep -q "200"
-      interval: 5s
-      retries: 7
-      start_period: 45s
-      timeout: 4s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
