@@ -38,7 +38,7 @@ services:
       - xpack.security.enabled=false # for v6.8
 #     - xpack.security.http.ssl.enabled="false" # for v8.10
     healthcheck:
-      test: /usr/share/elasticsearch/config/healthcheck.sh
+      test: curl -s http://localhost:9200/_cat/health | grep -q "green\|yellow"
       retries: 5
       start_period: 15s
       timeout: 10s
@@ -55,15 +55,15 @@ services:
         condition: "service_healthy"
     network_mode: host
     volumes:
+      - ./api-caller/startup.sh:/etc/algomon/api-caller/startup.sh
       - ./api-caller/algonode-api-origin.yaml:/etc/algomon/api-caller/algonode-api-origin.yaml
       - ./api-caller/algonode-api-endpoint.yaml:/etc/algomon/api-caller/algonode-api-endpoint.yaml
       - ./api-caller/algonode-api-caller.sh:/etc/algomon/api-caller/algonode-api-caller.sh
-#    healthcheck:
-#      test: ps -o user,pid,start,cmd -N --ppid $$ | grep cron
-      # test: sh -c 'exec ps --no-headers -N --ppid "$$" -o pid,start,comm,cmd' | grep -v "grep" | tac | grep -m1 "algonod>
-#      retries: 5
-#      start_period: 15s
-#      timeout: 10s
+    healthcheck:
+      test: ps -o user,pid,start,cmd | grep -q "cron"
+      retries: 5
+      start_period: 15s
+      timeout: 10s
 
   algomon-grafana:
     image: algomon/grafana/grafana:latest
