@@ -76,6 +76,8 @@ services:
         condition: "service_healthy"
       algomon-elasticsearch:
         condition: "service_healthy"
+      algomon-api-caller:
+        condition: "service_healthy"        
     network_mode: host
     volumes:
       - ./grafana/dashboards:/var/lib/grafana/dashboards
