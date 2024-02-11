@@ -1,4 +1,2 @@
 FROM docker.elastic.co/elasticsearch/elasticsearch:6.8.23
-
-COPY ./healthcheck.sh /usr/share/elasticsearch/config/healthcheck.sh
-RUN chmod 777 /usr/share/elasticsearch/config/healthcheck.sh
+WORKDIR /usr/share/elasticsearch/config/ 

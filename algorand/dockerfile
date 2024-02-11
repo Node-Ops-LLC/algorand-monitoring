@@ -1,4 +1,5 @@
 FROM algorand/algod:latest
+WORKDIR /algod/data
 
-RUN chown -R 65534:65534 /algod/data
+RUN chown -R 65534:65534 .
 RUN goal kmd start
