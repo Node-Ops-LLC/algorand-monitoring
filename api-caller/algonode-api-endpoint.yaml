@@ -4,16 +4,16 @@
     method: GET
     path: /v2/status
     query:
-    elastic_index: algod
+    elastic_index: algomon-api-caller
   - endpoint: version
     method: GET
     path: /versions
     query:
-    elastic_index: algod
+    elastic_index: algomon-api-caller
 - api: kmd
   endpoints:
   - endpoint: version
     method: GET
     path: /versions
     query:
-    elastic_index: kmd
+    elastic_index: algomon-api-caller

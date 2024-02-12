@@ -10,14 +10,6 @@ datasources:
   isDefault: true
   uid: prometheus
 
-#- name: Loki
-#  type: loki
-#  access: proxy
-#  url: http://localhost:3100
-#  orgId: 1
-#  basicAuth: false
-#  uid: loki
-
 - name: Elasticsearch
   type: elasticsearch
   access: proxy
